@@ -5,7 +5,7 @@
 // Cells are built in normalized layout space (u right, v down, both [0,1])
 // and mapped to world coordinates x, y ∈ [-1, 1] (y up) for the equations.
 
-import { evalIntensity } from './math-engine.js';
+import { evalIntensity, evalValue } from './math-engine.js';
 
 const SQRT3 = Math.sqrt(3);
 
@@ -131,10 +131,12 @@ export class Renderer2D {
 
   drawFast(fns, t, opts) {
     const { nx, ny, scopes, image, ctx } = this;
+    const vars = fns.vars;
     const data = image.data;
     for (let idx = 0; idx < scopes.length; idx++) {
       const scope = scopes[idx];
       scope.t = t;
+      if (vars) for (const v of vars) scope[v.name] = evalValue(v.code, scope);
       const p = idx * 4;
       data[p] = fns.r ? evalIntensity(fns.r, scope) * 255 : 0;
       data[p + 1] = fns.g ? evalIntensity(fns.g, scope) * 255 : 0;
@@ -177,15 +179,18 @@ export class Renderer2D {
       ctx.lineWidth = 1.5 * this.dpr;
       ctx.strokeRect(i * cw, j * ch, cw, ch);
     }
+    this.drawOverlay(opts);
   }
 
   drawPaths(fns, t, opts) {
     const { ctx, scopes, paths } = this;
+    const vars = fns.vars;
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     for (let idx = 0; idx < scopes.length; idx++) {
       const scope = scopes[idx];
       scope.t = t;
+      if (vars) for (const v of vars) scope[v.name] = evalValue(v.code, scope);
       const R = fns.r ? (evalIntensity(fns.r, scope) * 255) | 0 : 0;
       const G = fns.g ? (evalIntensity(fns.g, scope) * 255) | 0 : 0;
       const B = fns.b ? (evalIntensity(fns.b, scope) * 255) | 0 : 0;
@@ -206,6 +211,103 @@ export class Renderer2D {
       ctx.lineWidth = 1.5 * this.dpr;
       ctx.stroke(p);
     }
+    this.drawOverlay(opts);
+  }
+
+  // Axes (when the grid is on) and the r/theta indicator for the probed cell.
+  drawOverlay(opts) {
+    if (opts.grid) this.drawAxes();
+    if (opts.highlight != null) this.drawIndicator(opts.highlight);
+  }
+
+  labelText(text, x, y) {
+    const ctx = this.ctx;
+    ctx.font = `${11 * this.dpr}px ui-monospace, monospace`;
+    ctx.lineWidth = 3 * this.dpr;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.strokeText(text, x, y);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(text, x, y);
+  }
+
+  drawAxes() {
+    const ctx = this.ctx;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = Math.max(1, this.dpr);
+    ctx.beginPath();
+    ctx.moveTo(0, H / 2);
+    ctx.lineTo(W, H / 2);
+    ctx.moveTo(W / 2, 0);
+    ctx.lineTo(W / 2, H);
+    ctx.stroke();
+    this.labelText('+x', W - 22 * this.dpr, H / 2 - 6 * this.dpr);
+    this.labelText('+y', W / 2 + 6 * this.dpr, 14 * this.dpr);
+  }
+
+  // Radius line from the origin to the probed cell, an arc for theta,
+  // and the numeric r / theta values next to them.
+  drawIndicator(idx) {
+    const ctx = this.ctx;
+    const dpr = this.dpr;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const cell = this.cells[idx];
+    const scope = this.scopes[idx];
+    const ox = W / 2;
+    const oy = H / 2;
+    const px = cell.u * W;
+    const py = cell.v * H;
+
+    // projection lines to the axes, labeled with the x / y coordinates
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = Math.max(1, dpr);
+    ctx.setLineDash([3 * dpr, 3 * dpr]);
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(px, oy); // vertical, down/up to the x-axis
+    ctx.moveTo(px, py);
+    ctx.lineTo(ox, py); // horizontal, across to the y-axis
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.font = `${11 * dpr}px ui-monospace, monospace`;
+    const xText = `x=${scope.x.toFixed(2)}`;
+    const xW = ctx.measureText(xText).width;
+    let xLx = px + 5 * dpr;
+    if (xLx + xW > W) xLx = px - xW - 5 * dpr; // keep on-canvas near the right edge
+    this.labelText(xText, xLx, py < oy ? oy + 15 * dpr : oy - 7 * dpr);
+    const yText = `y=${scope.y.toFixed(2)}`;
+    const yW = ctx.measureText(yText).width;
+    this.labelText(yText, px < ox ? ox + 5 * dpr : ox - yW - 5 * dpr, py - 5 * dpr);
+
+    // radius line
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.setLineDash([5 * dpr, 4 * dpr]);
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    ctx.lineTo(px, py);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // theta arc from the +x axis (canvas y is flipped, so angles negate)
+    const rPix = Math.hypot(px - ox, py - oy);
+    const arcR = 26 * dpr;
+    if (rPix > arcR + 6 * dpr) {
+      ctx.beginPath();
+      ctx.arc(ox, oy, arcR, 0, -scope.theta, scope.theta > 0);
+      ctx.stroke();
+      const half = scope.theta / 2;
+      this.labelText(`θ=${scope.theta.toFixed(2)}`,
+        ox + (arcR + 8 * dpr) * Math.cos(half),
+        oy - (arcR + 8 * dpr) * Math.sin(half) + 4 * dpr);
+    }
+
+    this.labelText(`r=${scope.r.toFixed(2)}`,
+      (ox + px) / 2 + 6 * dpr,
+      (oy + py) / 2 - 8 * dpr);
   }
 
   // Index of the cell under a pointer event, or null if outside the canvas.

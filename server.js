@@ -125,14 +125,25 @@ function sanitizeConfig(c) {
   const b = eq(c.eqs?.b);
   if (!r || !g || !b) return null;
   const int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+  // user-defined helper variables: bounded count, safe names, capped exprs
+  const vars = [];
+  if (Array.isArray(c.vars)) {
+    for (const v of c.vars.slice(0, 12)) {
+      if (v && typeof v.name === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,15}$/.test(v.name)
+          && typeof v.expr === 'string' && v.expr.trim() && v.expr.length <= 400) {
+        vars.push({ name: v.name, expr: v.expr });
+      }
+    }
+  }
+  const withVars = (config) => (vars.length ? { ...config, vars } : config);
   if (c.dim === '2d') {
     if (!int(c.nx, 2, 256) || !int(c.ny, 2, 256)) return null;
     const cellType = CELL_TYPES.includes(c.cellType) ? c.cellType : 'square';
-    return { dim: '2d', nx: c.nx, ny: c.ny, cellType, eqs: { r, g, b } };
+    return withVars({ dim: '2d', nx: c.nx, ny: c.ny, cellType, eqs: { r, g, b } });
   }
   if (c.dim === '3d') {
     if (!int(c.n, 2, 32)) return null;
-    return { dim: '3d', n: c.n, eqs: { r, g, b } };
+    return withVars({ dim: '3d', n: c.n, eqs: { r, g, b } });
   }
   return null;
 }

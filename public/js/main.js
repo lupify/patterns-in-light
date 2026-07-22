@@ -1,6 +1,6 @@
 // App shell: home / new-pattern wizard / live editor.
 
-import { compileChannel, evalRaw } from './math-engine.js';
+import { compileChannel, evalRaw, evalValue, makeTestScope } from './math-engine.js';
 import { Renderer2D } from './render2d.js';
 
 const $ = (id) => document.getElementById(id);
@@ -27,6 +27,24 @@ const EXAMPLES = [
       eqs: { r: '(1+sin(3theta + 12r - 2t))/2', g: '(1+sin(3theta + 12r - 2t + 2))/2', b: '(1+sin(3theta + 12r - 2t + 4))/2' } },
   },
   {
+    // a helper variable defines a radius whose center wanders over time
+    name: 'Wandering ripple',
+    config: { dim: '2d', nx: 40, ny: 40, cellType: 'square',
+      vars: [{ name: 'u', expr: 'sqrt((x - sin(t)/3)^2 + (y + sin(2.1t)/3)^2)' }],
+      eqs: { r: '(1+sin(12u - 3t))/2', g: '(1+sin(12u - 3t + 2))/2', b: '(1+sin(12u - 3t + 4))/2' } },
+  },
+  {
+    // ripples whose centers are moved off the origin: build your own
+    // shifted radius with sqrt((x-a)^2 + (y-b)^2)
+    name: 'Shifted origin',
+    config: { dim: '2d', nx: 40, ny: 40, cellType: 'square',
+      eqs: {
+        r: '(1+sin(12*sqrt((x-0.5)^2 + (y-0.5)^2) - 3t))/2',
+        g: '(1+sin(12*sqrt((x+0.5)^2 + (y+0.5)^2) - 3t))/2',
+        b: '(1+sin(10r + 2t))/2',
+      } },
+  },
+  {
     name: 'Complex waves',
     config: { dim: '2d', nx: 68, ny: 40, cellType: 'tri',
       eqs: { r: '(1+Re(e^(i*(4x + 4y + 2t))))/2', g: '(1+Im(e^(i*(4x - 4y + 2t))))/2', b: '(1+Re(e^(i*(8x*y + t))))/2' } },
@@ -47,6 +65,7 @@ const EXAMPLES = [
 
 let renderer = null;
 let compiled = { r: null, g: null, b: null };
+let compiledVars = []; // [{name, code}] in definition order
 let currentConfig = null;
 let playing = true;
 let tBase = 0;          // t value when the clock was last (re)started
@@ -282,16 +301,93 @@ function setGrid(next) {
   btn.setAttribute('aria-pressed', String(gridOn));
 }
 
+function renderTex(el, tex) {
+  if (window.katex) {
+    try { window.katex.render(tex, el, { throwOnError: false }); return; }
+    catch { /* fall through to plain text */ }
+  }
+  el.textContent = tex;
+}
+
 function recompile(channel) {
   const input = $(`eq-${channel}`);
   const errEl = $(`err-${channel}`);
   try {
-    compiled[channel] = compileChannel(input.value);
+    compiled[channel] = compileChannel(input.value, makeTestScope(compiledVars));
     currentConfig.eqs[channel] = input.value;
     errEl.textContent = '';
+    renderTex($(`tex-${channel}`), compiled[channel].tex);
   } catch (err) {
     errEl.textContent = String(err.message || err);
   }
+}
+
+// ----- user-defined helper variables -----
+
+const RESERVED = new Set(['t', 'x', 'y', 'z', 'r', 'theta', 'rho', 'phi', 'pi', 'e', 'i', 'E', 'PI', 'tau', 'Re', 'Im']);
+
+function addVarRow(text = '') {
+  const row = document.createElement('div');
+  row.className = 'var-row';
+  const input = document.createElement('input');
+  input.value = text;
+  input.placeholder = 'u = sqrt((x-1/2)^2 + y^2)';
+  input.autocomplete = 'off';
+  input.autocapitalize = 'off';
+  input.spellcheck = false;
+  input.addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(refreshEquations, 300);
+  });
+  const del = document.createElement('button');
+  del.className = 'delete';
+  del.textContent = '✕';
+  del.title = 'Remove variable';
+  del.addEventListener('click', () => {
+    row.remove();
+    refreshEquations();
+  });
+  const err = document.createElement('div');
+  err.className = 'err';
+  const tex = document.createElement('div');
+  tex.className = 'tex';
+  row.append(input, del, err, tex);
+  $('vars-list').appendChild(row);
+  return input;
+}
+
+// Recompile the variable definitions in order (each may use the ones
+// above it), then the R/G/B channels that depend on them.
+function refreshEquations() {
+  compiledVars = [];
+  const validVars = [];
+  const seen = new Set();
+  for (const row of $('vars-list').children) {
+    const input = row.querySelector('input');
+    const errEl = row.querySelector('.err');
+    const texEl = row.querySelector('.tex');
+    const text = input.value.trim();
+    if (!text) { errEl.textContent = ''; texEl.textContent = ''; continue; }
+    try {
+      const m = text.match(/^([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.+)$/s);
+      if (!m) throw new Error('write it as: name = expression');
+      const [, name, expr] = m;
+      if (RESERVED.has(name)) throw new Error(`“${name}” is a built-in variable`);
+      if (seen.has(name)) throw new Error(`“${name}” is already defined`);
+      const code = compileChannel(expr, makeTestScope(compiledVars));
+      seen.add(name);
+      compiledVars.push({ name, code });
+      validVars.push({ name, expr });
+      errEl.textContent = '';
+      renderTex(texEl, `${name} = ${code.tex}`);
+    } catch (err) {
+      errEl.textContent = String(err.message || err);
+    }
+  }
+  if (validVars.length) currentConfig.vars = validVars;
+  else delete currentConfig.vars;
+  compiled.vars = compiledVars;
+  for (const c of ['r', 'g', 'b']) recompile(c);
 }
 
 // ----- probing -----
@@ -394,6 +490,7 @@ function drawPlot(tNow) {
     const arr = new Array(PLOT_SAMPLES);
     for (let s = 0; s < PLOT_SAMPLES; s++) {
       scope.t = t0 + (2 * PLOT_HALF_SPAN * s) / (PLOT_SAMPLES - 1);
+      for (const uv of compiledVars) scope[uv.name] = evalValue(uv.code, scope);
       const v = evalRaw(compiled[c], scope);
       arr[s] = v;
       if (v != null) {
@@ -491,10 +588,10 @@ async function openEditor(config, name = '', view = null, origin = null) {
   }
 
   compiled = { r: null, g: null, b: null };
-  for (const c of ['r', 'g', 'b']) {
-    $(`eq-${c}`).value = config.eqs[c];
-    recompile(c);
-  }
+  for (const c of ['r', 'g', 'b']) $(`eq-${c}`).value = config.eqs[c];
+  $('vars-list').replaceChildren();
+  for (const v of config.vars || []) addVarRow(`${v.name} = ${v.expr}`);
+  refreshEquations();
 
   setT(0);
   setPlaying(true);
@@ -513,11 +610,12 @@ async function openEditor(config, name = '', view = null, origin = null) {
     const t = currentT();
     const tInput = $('in-t');
     if (document.activeElement !== tInput) tInput.value = t.toFixed(2);
+    // Probe visuals (highlight, r/theta indicator, 3D marker) only draw
+    // with the grid on; grid off shows nothing but the pattern itself.
     const opts = { grid: gridOn };
-    if (currentConfig.dim === '2d') {
-      if (probe) opts.highlight = probe.cell;
-    } else if (probe) {
-      opts.probe = probe.base;
+    if (gridOn && probe) {
+      if (currentConfig.dim === '2d') opts.highlight = probe.cell;
+      else opts.probe = probe.base;
     }
     renderer.draw(compiled, t, opts);
     if (probe) drawPlot(t);
@@ -579,9 +677,17 @@ $('btn-probe-clear').addEventListener('click', clearProbe);
 // Tap or drag on the 2D canvas to probe a grid cell.
 {
   const canvas = $('canvas2d');
+  // On touch, probe above the contact point so the thumb doesn't hide
+  // the highlighted cell; clamped so top-edge touches still work.
+  const TOUCH_OFFSET = 48; // CSS px
   const probeFromPointer = (ev) => {
     if (!renderer || !currentConfig || currentConfig.dim !== '2d') return;
-    const cell = renderer.cellAt(ev.clientX, ev.clientY);
+    let y = ev.clientY;
+    if (ev.pointerType === 'touch') {
+      const rect = canvas.getBoundingClientRect();
+      y = Math.max(rect.top + 1, y - TOUCH_OFFSET);
+    }
+    const cell = renderer.cellAt(ev.clientX, y);
     if (cell != null) setProbe(cell);
   };
   canvas.addEventListener('pointerdown', (ev) => {
@@ -617,6 +723,8 @@ for (const c of ['r', 'g', 'b']) {
     debounce = setTimeout(() => recompile(c), 250);
   });
 }
+
+$('btn-add-var').addEventListener('click', () => addVarRow('').focus());
 
 $('btn-save').addEventListener('click', () => {
   const name = $('pattern-name').value.trim() || 'Untitled';

@@ -122,7 +122,20 @@ fieldset label { margin-right: 1rem; white-space: nowrap; }
 }
 #canvas2d, #container3d { width: 100%; height: 100%; display: block; }
 #canvas2d { image-rendering: pixelated; }
+#container3d { position: relative; }
 #container3d canvas { display: block; }
+
+.label3d {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #fff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+  pointer-events: none;
+  white-space: nowrap;
+}
 
 .controls { margin-top: 0.6rem; }
 
@@ -151,8 +164,30 @@ fieldset label { margin-right: 1rem; white-space: nowrap; }
 .plot-range label { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); }
 .plot-range input { width: 4.2rem; padding: 0.35rem 0.5rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
-.equation { margin: 0.6rem 0; display: grid; grid-template-columns: 3rem 1fr; align-items: center; gap: 0.4rem; }
+.equation { margin: 0.6rem 0; display: grid; grid-template-columns: 3rem 1fr; align-items: center; gap: 0.15rem 0.4rem; }
 .equation input { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.equation .tex { grid-column: 2; }
+
+.tex { overflow-x: auto; font-size: 0.95rem; padding: 0.1rem 0; min-height: 0; }
+.tex .katex-display { margin: 0; }
+
+.var-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.4rem;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+.var-row input { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.var-row .err { grid-column: 1 / -1; color: var(--err); font-size: 0.78rem; min-height: 1em; }
+.var-row .tex { grid-column: 1 / -1; }
+.var-row button.delete { color: var(--err); padding: 0.2rem 0.6rem; min-height: 2.2rem; }
+.vars-hint code {
+  background: #0a0d13;
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.8rem;
+}
 .equation .err { grid-column: 2; color: var(--err); font-size: 0.78rem; min-height: 1em; }
 .chan { font-weight: 700; text-align: right; }
 .chan-r { color: #ff7a7a; }

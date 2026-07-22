@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { makeScopes3D, evalIntensity } from './math-engine.js';
+import { makeScopes3D, evalIntensity, evalValue } from './math-engine.js';
 
 export class Renderer3D {
   constructor(container, n) {
@@ -55,6 +55,24 @@ export class Renderer3D {
     this.marker.visible = false;
     this.scene.add(this.marker);
 
+    // Axes shown with the grid toggle (x red, y green, z blue)
+    this.axes = new THREE.AxesHelper(1.35);
+    this.axes.visible = false;
+    this.scene.add(this.axes);
+
+    // Radius line from the origin to the probed point
+    const lineGeom = new THREE.BufferGeometry();
+    lineGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    this.originLine = new THREE.Line(lineGeom,
+      new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
+    this.originLine.visible = false;
+    this.scene.add(this.originLine);
+
+    // Floating HTML label with the probed point's spherical coordinates
+    this.label = document.createElement('div');
+    this.label.className = 'label3d';
+    container.appendChild(this.label);
+
     this.resize();
   }
 
@@ -68,9 +86,11 @@ export class Renderer3D {
   // opts: { grid: bool, probe: {x, y, z} | null }
   draw(fns, t, opts = {}) {
     const { scopes, colors } = this;
+    const vars = fns.vars;
     for (let idx = 0; idx < scopes.length; idx++) {
       const scope = scopes[idx];
       scope.t = t;
+      if (vars) for (const v of vars) scope[v.name] = evalValue(v.code, scope);
       const p = idx * 3;
       colors[p] = fns.r ? evalIntensity(fns.r, scope) : 0;
       colors[p + 1] = fns.g ? evalIntensity(fns.g, scope) : 0;
@@ -78,14 +98,32 @@ export class Renderer3D {
     }
     this.points.geometry.attributes.color.needsUpdate = true;
     this.box.visible = !!opts.grid;
-    if (opts.probe) {
-      this.marker.position.set(opts.probe.x, opts.probe.y, opts.probe.z);
+    this.axes.visible = !!opts.grid;
+    const p = opts.probe;
+    if (p) {
+      this.marker.position.set(p.x, p.y, p.z);
       this.marker.visible = true;
+      const pos = this.originLine.geometry.attributes.position;
+      pos.setXYZ(1, p.x, p.y, p.z);
+      pos.needsUpdate = true;
+      this.originLine.visible = true;
     } else {
       this.marker.visible = false;
+      this.originLine.visible = false;
+      this.label.textContent = '';
     }
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+    if (p) {
+      // pin the coordinate label next to the marker's screen position
+      const v = new THREE.Vector3(p.x, p.y, p.z).project(this.camera);
+      const size = this.renderer.domElement.clientWidth;
+      this.label.textContent =
+        `r=${p.rho.toFixed(2)} θ=${p.theta.toFixed(2)} φ=${p.phi.toFixed(2)}`;
+      this.label.style.transform =
+        `translate(${((v.x + 1) / 2) * size + 10}px, ${((1 - v.y) / 2) * size - 22}px)`;
+      this.label.style.visibility = v.z < 1 ? 'visible' : 'hidden'; // behind camera
+    }
   }
 
   // Nearest grid point to world coordinates (each ∈ [-1, 1]).
@@ -107,6 +145,10 @@ export class Renderer3D {
     this.box.material.dispose();
     this.marker.geometry.dispose();
     this.marker.material.dispose();
+    this.axes.dispose();
+    this.originLine.geometry.dispose();
+    this.originLine.material.dispose();
+    this.label.remove();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

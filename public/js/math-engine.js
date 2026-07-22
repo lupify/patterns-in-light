@@ -10,13 +10,31 @@ math.import({ Re: math.re, Im: math.im }, { silent: true });
 // wrong argument counts) at compile time rather than mid-animation.
 const TEST_SCOPE = { t: 0.5, x: 0.3, y: 0.3, z: 0.3, r: 0.42, rho: 0.52, theta: 0.78, phi: 0.95 };
 
-// Compile one channel's expression text. Throws with a readable message
-// if the expression doesn't parse or references unknown variables.
-export function compileChannel(text) {
+// Test scope extended with the user's helper variables ({name, code} list),
+// evaluated in order so later definitions can use earlier ones.
+export function makeTestScope(vars) {
+  const scope = { ...TEST_SCOPE };
+  if (vars) for (const v of vars) scope[v.name] = evalValue(v.code, scope);
+  return scope;
+}
+
+// Compile an expression. Throws with a readable message if it doesn't
+// parse or references unknown variables. The returned code carries a
+// `.tex` property with the expression's LaTeX form.
+export function compileChannel(text, testScope = { ...TEST_SCOPE }) {
   if (!text || !text.trim()) throw new Error('empty expression');
-  const code = math.compile(text);
-  code.evaluate({ ...TEST_SCOPE }); // throws on undefined symbols etc.
+  const node = math.parse(text);
+  const code = node.compile();
+  code.evaluate(testScope); // throws on undefined symbols etc.
+  code.tex = node.toTex();
   return code;
+}
+
+// Evaluate to the raw math.js value (numbers, Complex, ...) — used for
+// helper variables so complex intermediates survive until Re/Im.
+export function evalValue(code, scope) {
+  try { return code.evaluate(scope); }
+  catch { return NaN; }
 }
 
 // Evaluate a compiled expression against a scope ({t, x, y, ...}) and

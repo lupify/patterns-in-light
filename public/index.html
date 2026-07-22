@@ -7,6 +7,9 @@
   <link rel="stylesheet" href="style.css">
   <!-- math.js: parses and evaluates the equations (supports complex numbers) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.3/math.min.js"></script>
+  <!-- KaTeX: renders the typed equations as clean math notation -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
   <!-- import map so the 3D renderer can load three.js as an ES module -->
   <script type="importmap">
   {
@@ -20,7 +23,7 @@
 <body>
   <header>
     <h1 id="home-link">Patterns in Light</h1>
-    <p class="tagline">math &rarr; color, in real time</p>
+    <p class="tagline">math &rarr; color</p>
   </header>
 
   <main>
@@ -119,17 +122,26 @@
             <label for="eq-r" class="chan chan-r">R =</label>
             <input id="eq-r" autocomplete="off" autocapitalize="off" spellcheck="false">
             <div class="err" id="err-r"></div>
+            <div class="tex" id="tex-r"></div>
           </div>
           <div class="equation">
             <label for="eq-g" class="chan chan-g">G =</label>
             <input id="eq-g" autocomplete="off" autocapitalize="off" spellcheck="false">
             <div class="err" id="err-g"></div>
+            <div class="tex" id="tex-g"></div>
           </div>
           <div class="equation">
             <label for="eq-b" class="chan chan-b">B =</label>
             <input id="eq-b" autocomplete="off" autocapitalize="off" spellcheck="false">
             <div class="err" id="err-b"></div>
+            <div class="tex" id="tex-b"></div>
           </div>
+          <div id="vars-list"></div>
+          <div class="row">
+            <button id="btn-add-var">+ Add variable</button>
+          </div>
+          <p class="muted vars-hint">Define helper variables, e.g.
+            <code>u = sqrt((x-1/2)^2 + y^2)</code>, then use them in R, G, B.</p>
         </div>
         <div id="plot-panel" hidden>
           <canvas id="plot"></canvas>
