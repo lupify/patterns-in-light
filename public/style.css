@@ -71,6 +71,19 @@ input[type="text"], input[type="number"], input:not([type]) {
 input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 input[type="number"] { width: 4.5rem; }
 
+textarea {
+  font: inherit;
+  font-size: 16px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  width: 100%;
+  resize: vertical;
+}
+textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
 fieldset {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -165,4 +178,18 @@ details#help p { margin: 0.45rem 0; }
 
 .save-row input { flex: 1; min-width: 8rem; }
 
+#publish-box { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; margin: 0.75rem 0; }
+
 #editor-msg { min-height: 1.2em; margin: 0.25rem 0; }
+
+/* ---- gallery ---- */
+.gallery-sort { margin: 0.25rem 0 0.6rem; }
+.gallery-sort button { padding: 0.3rem 0.8rem; min-height: 2.2rem; color: var(--muted); }
+.gallery-sort button.active { border-color: var(--accent); color: var(--accent); }
+
+.gallery-item { align-items: flex-start; flex-wrap: wrap; }
+.g-info { flex: 1; min-width: 200px; }
+.g-desc { color: var(--muted); font-size: 0.82rem; margin-top: 0.15rem; }
+.g-actions { display: flex; gap: 0.4rem; align-items: center; }
+.g-actions button { padding: 0.3rem 0.7rem; min-height: 2.2rem; white-space: nowrap; }
+.g-actions button:disabled { opacity: 0.6; cursor: default; }

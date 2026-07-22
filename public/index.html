@@ -34,6 +34,14 @@
       <h2>My Patterns</h2>
       <ul id="saved-list" class="pattern-list"></ul>
       <p id="saved-empty" class="muted">Nothing saved yet &mdash; make a pattern and hit Save.</p>
+
+      <h2>Gallery</h2>
+      <div class="row gallery-sort">
+        <button id="sort-new" class="active">Newest</button>
+        <button id="sort-top">Most liked</button>
+      </div>
+      <p id="gallery-status" class="muted">Loading&hellip;</p>
+      <ul id="gallery-list" class="pattern-list"></ul>
     </section>
 
     <!-- ============ NEW PATTERN WIZARD ============ -->
@@ -146,9 +154,14 @@
 
       <div class="row save-row">
         <input id="pattern-name" placeholder="Pattern name" autocomplete="off">
-        <button id="btn-save" class="primary">Save</button>
+        <button id="btn-save">Save on device</button>
         <button id="btn-share">Copy link</button>
         <button id="btn-editor-back">Back</button>
+      </div>
+      <div id="publish-box">
+        <textarea id="pattern-desc" rows="2" maxlength="400"
+          placeholder="Brief description — what does your pattern do?"></textarea>
+        <button id="btn-publish" class="primary">Publish to gallery</button>
       </div>
       <p id="editor-msg" class="muted"></p>
     </section>

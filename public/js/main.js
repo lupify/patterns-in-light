@@ -54,6 +54,7 @@ let wallStart = 0;      // performance.now() at (re)start, ms
 let rafId = 0;
 let gridOn = false;
 let probe = null;       // { cell: index (2D) | {i,j,k} (3D), base: coordinate scope copy }
+let galleryOrigin = null; // { forkOf: id } when the open pattern came from the gallery
 
 // ---------- views ----------
 
@@ -64,7 +65,10 @@ function showView(name) {
     renderer.dispose();
     renderer = null;
   }
-  if (name === 'home') renderSavedList();
+  if (name === 'home') {
+    renderSavedList();
+    loadGallery();
+  }
 }
 
 // ---------- home ----------
@@ -113,6 +117,95 @@ function renderSavedList() {
       saveSaved(list);
       renderSavedList();
     })));
+}
+
+// ---------- gallery (public, server-backed) ----------
+
+let galleryData = [];
+let gallerySort = 'new';
+const liked = new Set((() => {
+  try { return JSON.parse(localStorage.getItem('pil_liked')) || []; }
+  catch { return []; }
+})());
+
+async function loadGallery() {
+  $('gallery-status').textContent = 'Loading…';
+  try {
+    const res = await fetch('/api/patterns');
+    if (!res.ok) throw new Error();
+    galleryData = await res.json();
+    renderGallery();
+  } catch {
+    $('gallery-status').textContent = 'Gallery unavailable — is the server running?';
+    $('gallery-list').replaceChildren();
+  }
+}
+
+function renderGallery() {
+  const list = [...galleryData];
+  if (gallerySort === 'top') list.sort((a, b) => b.likes - a.likes || b.id - a.id);
+  $('gallery-status').textContent = list.length ? '' : 'Nothing published yet — be the first!';
+  $('gallery-list').replaceChildren(...list.map(galleryItem));
+}
+
+// Gallery names/descriptions come from other users: build DOM with
+// textContent only, never innerHTML.
+function galleryItem(p) {
+  const li = document.createElement('li');
+  li.className = 'gallery-item';
+
+  const info = document.createElement('div');
+  info.className = 'g-info';
+  const nameEl = document.createElement('span');
+  nameEl.className = 'p-name';
+  nameEl.textContent = p.name;
+  nameEl.addEventListener('click', () => openFromGallery(p, false));
+  const meta = document.createElement('span');
+  meta.className = 'p-meta';
+  meta.textContent = ' ' + describe(p.config)
+    + (p.forkedFromName ? ` · fork of ${p.forkedFromName}` : '');
+  const desc = document.createElement('div');
+  desc.className = 'g-desc';
+  desc.textContent = p.description || '';
+  info.append(nameEl, meta, desc);
+
+  const actions = document.createElement('div');
+  actions.className = 'g-actions';
+  const likeBtn = document.createElement('button');
+  likeBtn.textContent = `♥ ${p.likes}`;
+  likeBtn.disabled = liked.has(p.id);
+  likeBtn.title = likeBtn.disabled ? 'Already liked' : 'Like this pattern';
+  likeBtn.addEventListener('click', () => likePattern(p, likeBtn));
+  const forkBtn = document.createElement('button');
+  forkBtn.textContent = 'Fork';
+  forkBtn.title = 'Open an editable copy';
+  forkBtn.addEventListener('click', () => openFromGallery(p, true));
+  actions.append(likeBtn, forkBtn);
+
+  li.append(info, actions);
+  return li;
+}
+
+function openFromGallery(p, asFork) {
+  openEditor(structuredClone(p.config), asFork ? `${p.name} (fork)` : p.name, null,
+    { forkOf: p.id, description: p.description || '' });
+}
+
+async function likePattern(p, btn) {
+  if (liked.has(p.id)) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/patterns/${p.id}/like`, { method: 'POST' });
+    if (!res.ok) throw new Error();
+    const { likes } = await res.json();
+    p.likes = likes;
+    liked.add(p.id);
+    localStorage.setItem('pil_liked', JSON.stringify([...liked]));
+    btn.textContent = `♥ ${likes}`;
+    btn.title = 'Already liked';
+  } catch {
+    btn.disabled = false;
+  }
 }
 
 // ---------- wizard ----------
@@ -369,10 +462,14 @@ function drawPlot(tNow) {
 
 // view (optional): { grid: bool, probe: cell, t: number } — restores the
 // exact state a shared link was copied in.
-async function openEditor(config, name = '', view = null) {
+// origin (optional): { forkOf: id, description } — set when the pattern was
+// opened from the public gallery, so publishing records the fork lineage.
+async function openEditor(config, name = '', view = null, origin = null) {
   currentConfig = config;
+  galleryOrigin = origin ? { forkOf: origin.forkOf } : null;
   showView('editor');
   $('pattern-name').value = name;
+  $('pattern-desc').value = origin?.description || '';
   $('editor-msg').textContent = '';
   $('help-vars').innerHTML = VAR_DOCS[config.dim] || '';
   $('wrap-z').hidden = config.dim !== '3d';
@@ -531,6 +628,47 @@ $('btn-save').addEventListener('click', () => {
   saveSaved(list);
   $('editor-msg').textContent = `Saved “${name}” on this device.`;
 });
+
+$('btn-publish').addEventListener('click', async () => {
+  const name = $('pattern-name').value.trim();
+  if (!name) {
+    $('editor-msg').textContent = 'Give your pattern a name before publishing.';
+    $('pattern-name').focus();
+    return;
+  }
+  const btn = $('btn-publish');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/patterns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        description: $('pattern-desc').value.trim(),
+        config: currentConfig,
+        forkOf: galleryOrigin ? galleryOrigin.forkOf : null,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `server said ${res.status}`);
+    }
+    $('editor-msg').textContent = `Published “${name}” to the public gallery!`;
+  } catch (err) {
+    $('editor-msg').textContent = `Could not publish: ${err.message || err}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+for (const [id, sort] of [['sort-new', 'new'], ['sort-top', 'top']]) {
+  $(id).addEventListener('click', () => {
+    gallerySort = sort;
+    $('sort-new').classList.toggle('active', sort === 'new');
+    $('sort-top').classList.toggle('active', sort === 'top');
+    renderGallery();
+  });
+}
 
 $('btn-share').addEventListener('click', async () => {
   const url = location.origin + location.pathname + shareHash();

@@ -37,12 +37,18 @@ min/max reference lines (default 0 and 1); values outside the lines stay
 visible. `t` is editable too, so you can scrub to an exact moment. The Grid
 button toggles cell-boundary lines (a bounding box in 3D).
 
-## Sharing
+## Sharing & the public gallery
 
-**Copy link** encodes everything in the URL — the equations, grid size and cell
-shape, grid-lines toggle, probed point, and current time — so pasting the link
-restores the exact same view. Saving stores the pattern in the browser's
-localStorage instead.
+Three ways to share:
+
+- **Copy link** encodes everything in the URL — equations, grid size and cell
+  shape, grid-lines toggle, probed point, and current time — so pasting the
+  link restores the exact same view. No server involved.
+- **Save on device** stores the pattern in the browser's localStorage.
+- **Publish to gallery** posts the pattern (with a title and a brief
+  description) to the public gallery on the home page, where anyone can open
+  it, **♥ like** it, or **fork** it into an editable copy. Published forks
+  show their lineage ("fork of …"). Likes are once-per-browser.
 
 Standard math notation is supported via [math.js](https://mathjs.org): `sin`,
 `cos`, `exp`, `e^x`, `sqrt`, `abs`, `atan2`, constants `pi`, `e`, and the
@@ -50,44 +56,57 @@ imaginary unit `i`. Complex numbers work throughout; use `Re(...)` or `Im(...)`
 to map a complex value to a real intensity (a bare complex result uses its real
 part).
 
-Patterns can be saved on-device (localStorage) and shared as URLs (the whole
-pattern is encoded in the link — great for sharing solutions with a class).
+## Gallery API
+
+The Node server (`server.js`) serves the static app plus:
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/patterns` | GET | list patterns (newest first, max 200) |
+| `/api/patterns` | POST | publish `{name, description, config, forkOf?}` |
+| `/api/patterns/:id/like` | POST | increment a pattern's likes |
+
+Configs are re-validated and rebuilt server-side (bounded grid sizes, known
+cell types, equation length caps) so only well-formed patterns are stored.
+
+Storage: Postgres when `DATABASE_URL` is set (as on Render), otherwise a JSON
+file in `data/` — local development needs no database and no `npm install`
+(the `pg` package is only imported when a database is configured).
 
 ## Run locally
-
-No dependencies to install:
 
 ```
 node server.js        # or: npm start
 ```
 
-Then open http://localhost:3000. (Any static file server pointed at `public/`
-also works.)
+Then open http://localhost:3000. Gallery data lands in `data/patterns.json`
+(gitignored).
 
 ## Deploy on Render
 
-The repo includes a `render.yaml` blueprint that deploys `public/` as a free
-static site:
+The repo's `render.yaml` blueprint provisions a Node **web service** plus a
+**Postgres database**, wired together via `DATABASE_URL`:
 
 1. Push this repo to GitHub (or GitLab).
 2. On [render.com](https://render.com): **New → Blueprint**, pick the repo, and
-   accept the defaults — Render reads `render.yaml` and publishes the site.
+   accept the defaults.
 
-Or without the blueprint: **New → Static Site**, pick the repo, leave the build
-command empty, and set the publish directory to `public`.
-
-Every push to the default branch redeploys automatically.
+Every push to the default branch redeploys automatically. Two free-tier
+caveats: the web service spins down after ~15 idle minutes (the first visitor
+then waits ~30–60 s; the paid starter instance stays warm), and Render's free
+Postgres databases expire after 30 days — upgrade the database to a paid plan
+when the gallery matters.
 
 ## Project layout
 
 ```
 public/
-  index.html          three views: home, new-pattern wizard, editor
+  index.html          three views: home (incl. gallery), wizard, editor
   style.css
-  js/main.js          app shell, saving, URL sharing, examples
+  js/main.js          app shell, gallery, publish/like/fork, URL sharing
   js/math-engine.js   math.js wrapper: compile expressions, complex → [0,1]
-  js/render2d.js      canvas pixel-grid renderer
+  js/render2d.js      canvas cell-grid renderer (squares/tris/circles/hexes)
   js/render3d.js      three.js point-grid renderer (orbit/pinch to rotate)
-server.js             zero-dependency static server for local dev
-render.yaml           Render static-site blueprint
+server.js             web service: static files + gallery JSON API
+render.yaml           Render blueprint: web service + Postgres
 ```

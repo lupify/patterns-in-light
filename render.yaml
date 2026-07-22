@@ -1,6 +1,16 @@
+databases:
+  - name: patterns-db
+    plan: free
+
 services:
   - type: web
     name: patterns-in-light
-    runtime: static
-    buildCommand: ""
-    staticPublishPath: ./public
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: patterns-db
+          property: connectionString
