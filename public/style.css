@@ -1,0 +1,168 @@
+:root {
+  --bg: #0d1017;
+  --panel: #161b26;
+  --border: #2a3143;
+  --text: #e8ecf4;
+  --muted: #8a93a8;
+  --accent: #5b8cff;
+  --err: #ff6b6b;
+}
+
+* { box-sizing: border-box; }
+
+/* author display rules below would otherwise defeat the hidden attribute */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+
+header {
+  text-align: center;
+  padding: 1rem 1rem 0.25rem;
+}
+header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+.tagline { margin: 0; color: var(--muted); font-size: 0.85rem; }
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+h2 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
+
+.muted { color: var(--muted); font-size: 0.85rem; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  min-height: 2.6rem; /* comfortable touch target */
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:active { transform: scale(0.97); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.big { width: 100%; padding: 0.85rem; font-size: 1.05rem; }
+
+input[type="text"], input[type="number"], input:not([type]) {
+  font: inherit;
+  font-size: 16px; /* ≥16px stops iOS Safari from zooming in on focus */
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+}
+input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+input[type="number"] { width: 4.5rem; }
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 0.75rem 0;
+  padding: 0.6rem 0.9rem 0.8rem;
+}
+legend { color: var(--muted); font-size: 0.85rem; padding: 0 0.4rem; }
+fieldset label { margin-right: 1rem; white-space: nowrap; }
+.custom-grid { white-space: nowrap; }
+
+.row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin: 0.75rem 0; }
+
+.pattern-list { list-style: none; margin: 0; padding: 0; }
+.pattern-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.pattern-list .p-name { flex: 1; cursor: pointer; }
+.pattern-list .p-meta { color: var(--muted); font-size: 0.78rem; }
+.pattern-list button.delete { padding: 0.2rem 0.6rem; color: var(--err); }
+
+#stage {
+  width: 100%;
+  aspect-ratio: 1;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  touch-action: none;
+}
+#canvas2d, #container3d { width: 100%; height: 100%; display: block; }
+#canvas2d { image-rendering: pixelated; }
+#container3d canvas { display: block; }
+
+.controls { margin-top: 0.6rem; }
+
+.probe-row { gap: 0.6rem; margin: 0.5rem 0; }
+.probe-row label { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); }
+.probe-row input {
+  width: 4.6rem;
+  padding: 0.35rem 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+#btn-probe-clear { padding: 0.2rem 0.6rem; min-height: 2.2rem; color: var(--err); }
+
+/* Equations on the left, probe plot on the right; wraps below on phones */
+#workspace { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: stretch; }
+#equations { flex: 1 1 260px; min-width: 240px; }
+#plot-panel { flex: 1 1 220px; min-width: 210px; display: flex; flex-direction: column; gap: 0.35rem; }
+#plot {
+  width: 100%;
+  flex: 1;
+  min-height: 150px;
+  background: #05070b;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.plot-range { margin: 0; gap: 0.6rem; }
+.plot-range label { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); }
+.plot-range input { width: 4.2rem; padding: 0.35rem 0.5rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+.equation { margin: 0.6rem 0; display: grid; grid-template-columns: 3rem 1fr; align-items: center; gap: 0.4rem; }
+.equation input { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.equation .err { grid-column: 2; color: var(--err); font-size: 0.78rem; min-height: 1em; }
+.chan { font-weight: 700; text-align: right; }
+.chan-r { color: #ff7a7a; }
+.chan-g { color: #7aff9c; }
+.chan-b { color: #7ab8ff; }
+
+details#help {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.5rem 0.9rem;
+  margin: 0.75rem 0;
+  font-size: 0.85rem;
+}
+details#help summary { cursor: pointer; color: var(--muted); }
+details#help code {
+  background: #0a0d13;
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.82rem;
+}
+details#help p { margin: 0.45rem 0; }
+
+.save-row input { flex: 1; min-width: 8rem; }
+
+#editor-msg { min-height: 1.2em; margin: 0.25rem 0; }

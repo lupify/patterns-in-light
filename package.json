@@ -1,0 +1,10 @@
+{
+  "name": "patterns-in-light",
+  "version": "1.0.0",
+  "description": "Write math equations, see them as animated light patterns in 2D and 3D",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT"
+}

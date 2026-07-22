@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Patterns in Light</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- math.js: parses and evaluates the equations (supports complex numbers) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.3/math.min.js"></script>
+  <!-- import map so the 3D renderer can load three.js as an ES module -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <header>
+    <h1 id="home-link">Patterns in Light</h1>
+    <p class="tagline">math &rarr; color, in real time</p>
+  </header>
+
+  <main>
+    <!-- ============ HOME ============ -->
+    <section id="view-home">
+      <button id="btn-new" class="primary big">+ New Pattern</button>
+
+      <h2>Examples</h2>
+      <ul id="examples-list" class="pattern-list"></ul>
+
+      <h2>My Patterns</h2>
+      <ul id="saved-list" class="pattern-list"></ul>
+      <p id="saved-empty" class="muted">Nothing saved yet &mdash; make a pattern and hit Save.</p>
+    </section>
+
+    <!-- ============ NEW PATTERN WIZARD ============ -->
+    <section id="view-wizard" hidden>
+      <h2>New Pattern</h2>
+
+      <fieldset>
+        <legend>Dimension</legend>
+        <label><input type="radio" name="dim" value="2d" checked> 2D</label>
+        <label><input type="radio" name="dim" value="3d"> 3D</label>
+      </fieldset>
+
+      <fieldset id="grid-2d">
+        <legend>Grid</legend>
+        <label><input type="radio" name="grid2d" value="20"> 20 &times; 20</label>
+        <label><input type="radio" name="grid2d" value="40" checked> 40 &times; 40</label>
+        <label><input type="radio" name="grid2d" value="custom"> Custom:</label>
+        <span class="custom-grid">
+          <input type="number" id="custom-nx" min="2" max="256" value="60" inputmode="numeric"> &times;
+          <input type="number" id="custom-ny" min="2" max="256" value="60" inputmode="numeric">
+        </span>
+      </fieldset>
+
+      <fieldset id="cell-shape">
+        <legend>Cells</legend>
+        <label><input type="radio" name="cellType" value="square" checked> Squares</label>
+        <label><input type="radio" name="cellType" value="tri"> Triangles</label>
+        <label><input type="radio" name="cellType" value="circle"> Circles</label>
+        <label><input type="radio" name="cellType" value="hex"> Hexagons</label>
+      </fieldset>
+
+      <fieldset id="grid-3d" hidden>
+        <legend>Grid</legend>
+        <label><input type="radio" name="grid3d" value="10" checked> 10 &times; 10 &times; 10</label>
+        <label><input type="radio" name="grid3d" value="16"> 16 &times; 16 &times; 16</label>
+        <label><input type="radio" name="grid3d" value="custom"> Custom:</label>
+        <span class="custom-grid">
+          <input type="number" id="custom-n3" min="2" max="32" value="20" inputmode="numeric"> per side
+        </span>
+      </fieldset>
+
+      <div class="row">
+        <button id="btn-create" class="primary">Create</button>
+        <button id="btn-wizard-back">Back</button>
+      </div>
+    </section>
+
+    <!-- ============ EDITOR ============ -->
+    <section id="view-editor" hidden>
+      <div id="stage">
+        <canvas id="canvas2d" hidden></canvas>
+        <div id="container3d" hidden></div>
+      </div>
+
+      <div class="row controls">
+        <button id="btn-play" class="primary">Pause</button>
+        <button id="btn-reset-t">t = 0</button>
+        <button id="btn-grid" aria-pressed="false">Grid: off</button>
+      </div>
+
+      <div class="row probe-row">
+        <label class="mono">t <input id="in-t" inputmode="decimal" autocomplete="off"></label>
+        <label class="mono">x <input id="in-x" inputmode="decimal" autocomplete="off" placeholder="&ndash;"></label>
+        <label class="mono">y <input id="in-y" inputmode="decimal" autocomplete="off" placeholder="&ndash;"></label>
+        <label class="mono" id="wrap-z" hidden>z <input id="in-z" inputmode="decimal" autocomplete="off" placeholder="&ndash;"></label>
+        <label class="mono">r <input id="in-r" inputmode="decimal" autocomplete="off" placeholder="&ndash;"></label>
+        <label class="mono">&theta; <input id="in-theta" inputmode="decimal" autocomplete="off" placeholder="&ndash;"></label>
+        <label class="mono" id="wrap-phi" hidden>&phi; <input id="in-phi" inputmode="decimal" autocomplete="off" placeholder="&ndash;"></label>
+        <button id="btn-probe-clear" hidden title="Clear probed point">&#10005;</button>
+      </div>
+
+      <div id="workspace">
+        <div id="equations">
+          <div class="equation">
+            <label for="eq-r" class="chan chan-r">R =</label>
+            <input id="eq-r" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <div class="err" id="err-r"></div>
+          </div>
+          <div class="equation">
+            <label for="eq-g" class="chan chan-g">G =</label>
+            <input id="eq-g" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <div class="err" id="err-g"></div>
+          </div>
+          <div class="equation">
+            <label for="eq-b" class="chan chan-b">B =</label>
+            <input id="eq-b" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <div class="err" id="err-b"></div>
+          </div>
+        </div>
+        <div id="plot-panel" hidden>
+          <canvas id="plot"></canvas>
+          <div class="row plot-range">
+            <label class="mono">min <input id="plot-min" value="0" inputmode="decimal" autocomplete="off"></label>
+            <label class="mono">max <input id="plot-max" value="1" inputmode="decimal" autocomplete="off"></label>
+          </div>
+        </div>
+      </div>
+
+      <details id="help">
+        <summary>Variables &amp; functions</summary>
+        <div id="help-vars"></div>
+        <div class="help-general">
+          <p><b>Functions:</b> <code>sin cos tan asin acos atan atan2 exp log sqrt abs floor ceil round mod min max sign</code></p>
+          <p><b>Constants:</b> <code>pi</code>, <code>e</code>, <code>i</code> (imaginary unit)</p>
+          <p><b>Power:</b> <code>e^x</code>, <code>x^2</code> &nbsp; <b>Complex:</b> <code>Re(...)</code> and <code>Im(...)</code> take the real / imaginary part, e.g. <code>(1+Re(e^(i*(5x+t))))/2</code>. A complex result without Re/Im uses its real part.</p>
+          <p>Each channel should evaluate to a value in <code>[0, 1]</code> &mdash; values outside are clamped. <code>t</code> is time in seconds.</p>
+          <p><b>Probing:</b> tap a square (2D) or type coordinates above to inspect one grid point &mdash; the plot shows each channel's raw value from <code>t&minus;5</code> to <code>t+5</code> seconds, with min/max reference lines.</p>
+        </div>
+      </details>
+
+      <div class="row save-row">
+        <input id="pattern-name" placeholder="Pattern name" autocomplete="off">
+        <button id="btn-save" class="primary">Save</button>
+        <button id="btn-share">Copy link</button>
+        <button id="btn-editor-back">Back</button>
+      </div>
+      <p id="editor-msg" class="muted"></p>
+    </section>
+  </main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: patterns-in-light
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: ./public
