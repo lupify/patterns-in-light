@@ -22,29 +22,44 @@
 </head>
 <body>
   <header>
-    <h1 id="home-link">Patterns in Light</h1>
+    <button id="btn-help" title="How to use">?</button>
+    <div class="header-row">
+      <h1 id="home-link">Patterns in Light</h1>
+      <nav class="header-nav">
+        <button id="btn-home">Home</button>
+        <button id="btn-gallery">Gallery</button>
+      </nav>
+    </div>
     <p class="tagline">math &rarr; color</p>
   </header>
 
   <main>
     <!-- ============ HOME ============ -->
     <section id="view-home">
-      <button id="btn-new" class="primary big">+ New Pattern</button>
-
-      <h2>Examples</h2>
-      <ul id="examples-list" class="pattern-list"></ul>
-
-      <h2>My Patterns</h2>
-      <ul id="saved-list" class="pattern-list"></ul>
-      <p id="saved-empty" class="muted">Nothing saved yet &mdash; make a pattern and hit Save.</p>
-
-      <h2>Gallery</h2>
-      <div class="row gallery-sort">
-        <button id="sort-new" class="active">Newest</button>
-        <button id="sort-top">Most liked</button>
+      <div class="tabs" id="home-tabs">
+        <button data-tab="mine" class="active">My Patterns</button>
+        <button data-tab="examples">Examples</button>
+        <button data-tab="gallery">Gallery</button>
       </div>
-      <p id="gallery-status" class="muted">Loading&hellip;</p>
-      <ul id="gallery-list" class="pattern-list"></ul>
+
+      <div id="tab-mine">
+        <button id="btn-new" class="primary big">+ New Pattern</button>
+        <ul id="saved-list" class="pattern-list"></ul>
+        <p id="saved-empty" class="muted">Nothing saved yet &mdash; make a pattern and hit Save.</p>
+      </div>
+
+      <div id="tab-examples" hidden>
+        <ul id="examples-list" class="pattern-list"></ul>
+      </div>
+
+      <div id="tab-gallery" hidden>
+        <div class="row gallery-sort">
+          <button id="sort-new" class="active">Newest</button>
+          <button id="sort-top">Most liked</button>
+        </div>
+        <p id="gallery-status" class="muted">Loading&hellip;</p>
+        <ul id="gallery-list" class="pattern-list"></ul>
+      </div>
     </section>
 
     <!-- ============ NEW PATTERN WIZARD ============ -->
@@ -97,12 +112,15 @@
       <div id="stage">
         <canvas id="canvas2d" hidden></canvas>
         <div id="container3d" hidden></div>
+        <button id="btn-fullscreen" title="Fullscreen">&#x26F6;</button>
       </div>
 
       <div class="row controls">
         <button id="btn-play" class="primary">Pause</button>
         <button id="btn-reset-t">t = 0</button>
         <button id="btn-grid" aria-pressed="false">Grid: off</button>
+        <button id="btn-gif" title="Download a 10-second GIF with the equations">GIF</button>
+        <button id="btn-webm" title="Download a 10-second video with the equations">WebM</button>
       </div>
 
       <div class="row probe-row">
@@ -178,6 +196,57 @@
       <p id="editor-msg" class="muted"></p>
     </section>
   </main>
+
+  <!-- ============ HOW-TO GUIDE ============ -->
+  <div id="help-modal" hidden>
+    <div class="modal-card">
+      <button id="btn-help-close" title="Close">&#10005;</button>
+      <h2>How to use</h2>
+
+      <h3>Create a pattern</h3>
+      <p>On <b>My Patterns</b>, tap <b>+ New Pattern</b>. Pick 2D or 3D, a grid
+        size (40&times;40 is a good start), and a cell shape &mdash; squares,
+        triangles, circles, or hexagons. Then hit <b>Create</b>.</p>
+
+      <h3>Write the equations</h3>
+      <p>Each of <b>R</b>, <b>G</b>, <b>B</b> is the brightness (0&ndash;1) of
+        that color at every cell, as a formula using <code>t</code> (seconds)
+        and the cell's position: <code>x</code>, <code>y</code>
+        (<code>z</code> in 3D), or polar <code>r</code>, <code>theta</code>
+        (<code>phi</code> in 3D) &mdash; mix them freely. Edit the text and the
+        pattern updates live; a typeset version appears under each box.</p>
+      <p>Try <code>(1+sin(10r - 3t))/2</code>. Functions like <code>sin</code>,
+        <code>cos</code>, <code>sqrt</code>, <code>e^x</code> work, plus complex
+        numbers: <code>i</code>, with <code>Re(...)</code> / <code>Im(...)</code>
+        to get a real value back.</p>
+
+      <h3>Helper variables</h3>
+      <p>Tap <b>+ Add variable</b> and type e.g.
+        <code>u = sqrt((x-1/2)^2 + y^2)</code>. Then use <code>u</code> inside
+        R, G, B. Variables can use earlier variables.</p>
+
+      <h3>Time controls</h3>
+      <p><b>Pause / Play</b> freezes the animation, <b>t = 0</b> restarts it,
+        and the <code>t</code> box is editable &mdash; type a value to jump to
+        that exact moment.</p>
+
+      <h3>Inspect a point</h3>
+      <p>Tap the pattern (2D) to select a cell, or type coordinates in the
+        <code>x y z</code> / <code>r &theta; &phi;</code> boxes (they snap to
+        the nearest cell). A plot shows each channel's value at that cell from
+        5&nbsp;s before to 5&nbsp;s after now. <b>Grid</b> turns on cell
+        borders, axes, and the coordinate indicators.</p>
+
+      <h3>Share your work</h3>
+      <p><b>Save on device</b> keeps a pattern in this browser.
+        <b>Publish to gallery</b> posts it (with a description) for everyone,
+        where it can be <b>&hearts; liked</b> (tap again to unlike) or
+        <b>forked</b> into someone's own editable copy.
+        <b>Copy link</b> puts the whole pattern in a URL.
+        <b>GIF</b> / <b>WebM</b> download a 10-second clip with the equations
+        printed below the pattern, and <b>&#x26F6;</b> shows it fullscreen.</p>
+    </div>
+  </div>
 
   <script type="module" src="js/main.js"></script>
 </body>

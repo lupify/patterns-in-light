@@ -63,6 +63,11 @@ async function makePgStore(url) {
         'UPDATE patterns SET likes = likes + 1 WHERE id = $1 RETURNING likes', [id]);
       return res.rowCount ? res.rows[0].likes : null;
     },
+    async unlike(id) {
+      const res = await pool.query(
+        'UPDATE patterns SET likes = GREATEST(likes - 1, 0) WHERE id = $1 RETURNING likes', [id]);
+      return res.rowCount ? res.rows[0].likes : null;
+    },
   };
 }
 
@@ -102,6 +107,13 @@ function makeFileStore(file) {
       const p = data.patterns.find((q) => q.id === id);
       if (!p) return null;
       p.likes++;
+      await persist();
+      return p.likes;
+    },
+    async unlike(id) {
+      const p = data.patterns.find((q) => q.id === id);
+      if (!p) return null;
+      p.likes = Math.max(0, p.likes - 1);
       await persist();
       return p.likes;
     },
@@ -192,8 +204,9 @@ async function handleApi(req, res, pathname) {
     return;
   }
   const like = pathname.match(/^\/api\/patterns\/(\d+)\/like$/);
-  if (like && req.method === 'POST') {
-    const likes = await store.like(Number(like[1]));
+  if (like && (req.method === 'POST' || req.method === 'DELETE')) {
+    const id = Number(like[1]);
+    const likes = req.method === 'POST' ? await store.like(id) : await store.unlike(id);
     if (likes == null) sendJson(res, 404, { error: 'no such pattern' });
     else sendJson(res, 200, { likes });
     return;

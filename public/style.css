@@ -22,9 +22,29 @@ body {
 }
 
 header {
+  position: relative;
   text-align: center;
   padding: 1rem 1rem 0.25rem;
 }
+
+#btn-help {
+  position: absolute;
+  top: 0.9rem;
+  left: 0.9rem;
+  padding: 0.25rem 0.8rem;
+  min-height: 2.2rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.header-nav { display: flex; gap: 0.4rem; }
+.header-nav button { padding: 0.25rem 0.8rem; min-height: 2.1rem; font-size: 0.85rem; }
 header h1 {
   margin: 0;
   font-size: 1.5rem;
@@ -112,6 +132,7 @@ fieldset label { margin-right: 1rem; white-space: nowrap; }
 .pattern-list button.delete { padding: 0.2rem 0.6rem; color: var(--err); }
 
 #stage {
+  position: relative;
   width: 100%;
   aspect-ratio: 1;
   background: #000;
@@ -119,6 +140,39 @@ fieldset label { margin-right: 1rem; white-space: nowrap; }
   border-radius: 12px;
   overflow: hidden;
   touch-action: none;
+}
+
+#btn-fullscreen {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 20;
+  background: rgba(22, 27, 38, 0.7);
+  border-color: rgba(255, 255, 255, 0.25);
+  padding: 0.3rem 0.7rem;
+  min-height: 2.4rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+/* CSS fullscreen (works on phones where the Fullscreen API doesn't) */
+#stage.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  width: 100vw;
+  height: 100vh;
+  aspect-ratio: auto;
+  border: none;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#stage.fullscreen #canvas2d,
+#stage.fullscreen #container3d {
+  width: min(100vw, 100vh);
+  height: min(100vw, 100vh);
 }
 #canvas2d, #container3d { width: 100%; height: 100%; display: block; }
 #canvas2d { image-rendering: pixelated; }
@@ -159,7 +213,10 @@ fieldset label { margin-right: 1rem; white-space: nowrap; }
   background: #05070b;
   border: 1px solid var(--border);
   border-radius: 10px;
+  touch-action: none; /* dragging scrubs time; don't scroll the page */
+  cursor: grab;
 }
+#plot:active { cursor: grabbing; }
 .plot-range { margin: 0; gap: 0.6rem; }
 .plot-range label { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); }
 .plot-range input { width: 4.2rem; padding: 0.35rem 0.5rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
@@ -217,6 +274,50 @@ details#help p { margin: 0.45rem 0; }
 
 #editor-msg { min-height: 1.2em; margin: 0.25rem 0; }
 
+/* ---- home tabs ---- */
+.tabs { display: flex; gap: 0.4rem; margin-bottom: 0.9rem; }
+.tabs button { flex: 1; color: var(--muted); }
+.tabs button.active { border-color: var(--accent); color: var(--accent); }
+
+/* ---- how-to modal ---- */
+#help-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem;
+  overflow-y: auto;
+}
+.modal-card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  max-width: 560px;
+  width: 100%;
+  padding: 1rem 1.25rem 1.25rem;
+}
+.modal-card h2 { margin: 0.25rem 0 0.25rem; font-size: 1.15rem; }
+.modal-card h3 { font-size: 0.95rem; margin: 1rem 0 0.25rem; color: var(--accent); }
+.modal-card p { margin: 0.25rem 0; font-size: 0.9rem; }
+.modal-card code {
+  background: #0a0d13;
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.82rem;
+}
+#btn-help-close {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  color: var(--err);
+  padding: 0.2rem 0.6rem;
+  min-height: 2.2rem;
+}
+
 /* ---- gallery ---- */
 .gallery-sort { margin: 0.25rem 0 0.6rem; }
 .gallery-sort button { padding: 0.3rem 0.8rem; min-height: 2.2rem; color: var(--muted); }
@@ -228,3 +329,4 @@ details#help p { margin: 0.45rem 0; }
 .g-actions { display: flex; gap: 0.4rem; align-items: center; }
 .g-actions button { padding: 0.3rem 0.7rem; min-height: 2.2rem; white-space: nowrap; }
 .g-actions button:disabled { opacity: 0.6; cursor: default; }
+.g-actions button.liked { border-color: #ff6b6b; color: #ff6b6b; }

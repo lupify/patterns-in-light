@@ -77,7 +77,15 @@ let galleryOrigin = null; // { forkOf: id } when the open pattern came from the 
 
 // ---------- views ----------
 
+function setFullscreen(on) {
+  $('stage').classList.toggle('fullscreen', on);
+  $('btn-fullscreen').textContent = on ? '✕' : '⛶';
+  $('btn-fullscreen').title = on ? 'Exit fullscreen' : 'Fullscreen';
+  if (renderer) renderer.resize();
+}
+
 function showView(name) {
+  if (name !== 'editor') setFullscreen(false);
   for (const v of ['home', 'wizard', 'editor']) $(`view-${v}`).hidden = v !== name;
   if (name !== 'editor' && renderer) {
     cancelAnimationFrame(rafId);
@@ -86,8 +94,16 @@ function showView(name) {
   }
   if (name === 'home') {
     renderSavedList();
-    loadGallery();
+    if (!$('tab-gallery').hidden) loadGallery();
   }
+}
+
+function setHomeTab(tab) {
+  for (const b of document.querySelectorAll('#home-tabs button')) {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  }
+  for (const t of ['mine', 'examples', 'gallery']) $(`tab-${t}`).hidden = t !== tab;
+  if (tab === 'gallery') loadGallery();
 }
 
 // ---------- home ----------
@@ -192,8 +208,8 @@ function galleryItem(p) {
   actions.className = 'g-actions';
   const likeBtn = document.createElement('button');
   likeBtn.textContent = `♥ ${p.likes}`;
-  likeBtn.disabled = liked.has(p.id);
-  likeBtn.title = likeBtn.disabled ? 'Already liked' : 'Like this pattern';
+  likeBtn.classList.toggle('liked', liked.has(p.id));
+  likeBtn.title = liked.has(p.id) ? 'Unlike' : 'Like this pattern';
   likeBtn.addEventListener('click', () => likePattern(p, likeBtn));
   const forkBtn = document.createElement('button');
   forkBtn.textContent = 'Fork';
@@ -210,19 +226,23 @@ function openFromGallery(p, asFork) {
     { forkOf: p.id, description: p.description || '' });
 }
 
+// Toggles: like on first press, unlike on the next.
 async function likePattern(p, btn) {
-  if (liked.has(p.id)) return;
+  const unlike = liked.has(p.id);
   btn.disabled = true;
   try {
-    const res = await fetch(`/api/patterns/${p.id}/like`, { method: 'POST' });
+    const res = await fetch(`/api/patterns/${p.id}/like`, { method: unlike ? 'DELETE' : 'POST' });
     if (!res.ok) throw new Error();
     const { likes } = await res.json();
     p.likes = likes;
-    liked.add(p.id);
+    if (unlike) liked.delete(p.id);
+    else liked.add(p.id);
     localStorage.setItem('pil_liked', JSON.stringify([...liked]));
     btn.textContent = `♥ ${likes}`;
-    btn.title = 'Already liked';
-  } catch {
+    btn.classList.toggle('liked', !unlike);
+    btn.title = unlike ? 'Like this pattern' : 'Unlike';
+  } catch { /* leave the button as it was */ }
+  finally {
     btn.disabled = false;
   }
 }
@@ -395,6 +415,7 @@ function refreshEquations() {
 function setProbe(cell) {
   const scope = renderer.scopeFor(cell);
   probe = { cell, base: { ...scope } };
+  plotLo = plotHi = null; // new cell → fresh plot autoscale
   // show the snapped point in both coordinate systems
   $('in-x').value = scope.x.toFixed(3);
   $('in-y').value = scope.y.toFixed(3);
@@ -412,6 +433,7 @@ function setProbe(cell) {
 
 function clearProbe() {
   probe = null;
+  plotLo = plotHi = null;
   for (const id of ['in-x', 'in-y', 'in-z', 'in-r', 'in-theta', 'in-phi']) $(id).value = '';
   $('plot-panel').hidden = true;
   $('btn-probe-clear').hidden = true;
@@ -455,8 +477,10 @@ function probeFromPolarInputs() {
 
 // ----- probe plot: channel intensities over t-5 .. t+5 at the probed cell -----
 
-const PLOT_SAMPLES = 121;
+const PLOT_SAMPLES = 200;
 const PLOT_HALF_SPAN = 5; // seconds either side of "now"
+let plotLo = null; // eased y-range so autoscaling doesn't twitch
+let plotHi = null;
 
 function plotBound(id, fallback) {
   const v = parseFloat($(id).value);
@@ -479,17 +503,26 @@ function drawPlot(tNow) {
   const minLine = plotBound('plot-min', 0);
   const maxLine = plotBound('plot-max', 1);
 
-  // Sample each channel; the y-range grows to keep out-of-bounds values visible.
-  const t0 = tNow - PLOT_HALF_SPAN;
+  // Sample on a fixed absolute time grid (not relative to tNow), so each
+  // peak keeps its exact value from frame to frame and the curve slides
+  // smoothly instead of shimmering.
+  const span = 2 * PLOT_HALF_SPAN;
+  const dt = span / PLOT_SAMPLES;
+  const windowStart = tNow - PLOT_HALF_SPAN;
+  const tStart = Math.floor(windowStart / dt) * dt;
+  const count = PLOT_SAMPLES + 2; // cover both edges of the window
   const scope = { ...probe.base };
   const series = {};
+  const times = new Array(count);
   let lo = Math.min(minLine, maxLine);
   let hi = Math.max(minLine, maxLine);
   for (const c of ['r', 'g', 'b']) {
     if (!compiled[c]) continue;
-    const arr = new Array(PLOT_SAMPLES);
-    for (let s = 0; s < PLOT_SAMPLES; s++) {
-      scope.t = t0 + (2 * PLOT_HALF_SPAN * s) / (PLOT_SAMPLES - 1);
+    const arr = new Array(count);
+    for (let s = 0; s < count; s++) {
+      const ts = tStart + s * dt;
+      times[s] = ts;
+      scope.t = ts;
       for (const uv of compiledVars) scope[uv.name] = evalValue(uv.code, scope);
       const v = evalRaw(compiled[c], scope);
       arr[s] = v;
@@ -501,11 +534,17 @@ function drawPlot(tNow) {
     series[c] = arr;
   }
   if (hi - lo < 1e-9) { lo -= 0.5; hi += 0.5; }
-  const pad = (hi - lo) * 0.08;
-  lo -= pad;
-  hi += pad;
-  const X = (s) => (s / (PLOT_SAMPLES - 1)) * w;
-  const Y = (v) => h - ((v - lo) / (hi - lo)) * h;
+  const rangePad = (hi - lo) * 0.08;
+  lo -= rangePad;
+  hi += rangePad;
+  // ease the displayed range toward the target instead of jumping
+  if (plotLo == null) { plotLo = lo; plotHi = hi; }
+  else {
+    plotLo += (lo - plotLo) * 0.2;
+    plotHi += (hi - plotHi) * 0.2;
+  }
+  const X = (s) => ((times[s] - windowStart) / span) * w;
+  const Y = (v) => h - ((v - plotLo) / (plotHi - plotLo)) * h;
 
   // min/max reference lines
   ctx.strokeStyle = '#8a93a8';
@@ -537,7 +576,7 @@ function drawPlot(tNow) {
     ctx.strokeStyle = CHANNEL_COLORS[c];
     ctx.beginPath();
     let pen = false;
-    for (let s = 0; s < PLOT_SAMPLES; s++) {
+    for (let s = 0; s < count; s++) {
       const v = series[c][s];
       if (v == null) { pen = false; continue; }
       if (pen) ctx.lineTo(X(s), Y(v));
@@ -605,23 +644,212 @@ async function openEditor(config, name = '', view = null, origin = null) {
   }
 
   cancelAnimationFrame(rafId);
-  const frame = () => {
-    if (!renderer) return;
-    const t = currentT();
-    const tInput = $('in-t');
-    if (document.activeElement !== tInput) tInput.value = t.toFixed(2);
-    // Probe visuals (highlight, r/theta indicator, 3D marker) only draw
-    // with the grid on; grid off shows nothing but the pattern itself.
-    const opts = { grid: gridOn };
-    if (gridOn && probe) {
-      if (currentConfig.dim === '2d') opts.highlight = probe.cell;
-      else opts.probe = probe.base;
-    }
-    renderer.draw(compiled, t, opts);
-    if (probe) drawPlot(t);
-    rafId = requestAnimationFrame(frame);
+  frameLoop();
+}
+
+function frameLoop() {
+  if (!renderer) return;
+  const t = currentT();
+  const tInput = $('in-t');
+  if (document.activeElement !== tInput) tInput.value = t.toFixed(2);
+  // Probe visuals (highlight, r/theta indicator, 3D marker) only draw
+  // with the grid on; grid off shows nothing but the pattern itself.
+  const opts = { grid: gridOn };
+  if (gridOn && probe) {
+    if (currentConfig.dim === '2d') opts.highlight = probe.cell;
+    else opts.probe = probe.base;
+  }
+  renderer.draw(compiled, t, opts);
+  if (probe) drawPlot(t);
+  rafId = requestAnimationFrame(frameLoop);
+}
+
+// ---------- clip export (video preferred, GIF fallback) ----------
+
+const CLIP_SECONDS = 10;
+const CLIP_SIZE = 720; // pattern area for video export
+const GIF_SIZE = 720;  // pattern area for GIF export
+const GIF_FPS = 10;
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error(`failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+}
+
+// MathJax renders LaTeX to self-contained SVG (glyph paths, no fonts)
+// that can be drawn onto a canvas. Loaded on demand at first export.
+async function ensureMathJax() {
+  if (window.MathJax && window.MathJax.tex2svg) return;
+  window.MathJax = { svg: { fontCache: 'none' }, startup: { typeset: false } };
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js');
+  await window.MathJax.startup.promise;
+}
+
+// gifenc encodes frame-by-frame (no big frame buffer), so high-res GIFs
+// stay within memory limits. Loaded as an ES module on first use.
+let gifenc = null;
+
+async function ensureGifenc() {
+  if (!gifenc) gifenc = await import('https://unpkg.com/gifenc@1.0.3/dist/gifenc.esm.js');
+}
+
+async function texToImage(tex) {
+  const svg = window.MathJax.tex2svg(tex, { display: true }).querySelector('svg');
+  svg.setAttribute('color', '#ffffff'); // paths use currentColor
+  const scale = 16; // px per ex: render large, downscale for crispness
+  svg.setAttribute('width', `${parseFloat(svg.getAttribute('width')) * scale}px`);
+  svg.setAttribute('height', `${parseFloat(svg.getAttribute('height')) * scale}px`);
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = () => reject(new Error('equation render failed'));
+    img.src = 'data:image/svg+xml;charset=utf-8,'
+      + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+  });
+  return img;
+}
+
+// One static canvas with every equation line, reused under all frames.
+// Line height scales with the export width so the math stays legible.
+async function renderClipFooter(lines, width) {
+  const lineH = Math.round(width / 11);
+  const pad = Math.round(width / 36);
+  const gap = Math.round(lineH * 0.15);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = pad * 2 + lines.length * (lineH + gap) - gap;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  let y = pad;
+  for (const line of lines) {
+    const img = await texToImage(line);
+    const s = Math.min(lineH / img.height, (width - pad * 2) / img.width);
+    ctx.drawImage(img, pad, y + (lineH - img.height * s) / 2, img.width * s, img.height * s);
+    y += lineH + gap;
+  }
+  return canvas;
+}
+
+// Compose canvas (pattern on top, equations below) shared by both formats.
+async function prepareCompose(width) {
+  const lines = [];
+  for (const c of ['r', 'g', 'b']) {
+    if (compiled[c]) lines.push(`${c.toUpperCase()} = ${compiled[c].tex}`);
+  }
+  for (const v of compiledVars) lines.push(`${v.name} = ${v.code.tex}`);
+  const footer = await renderClipFooter(lines, width);
+  const compose = document.createElement('canvas');
+  compose.width = width;
+  compose.height = width + footer.height;
+  return {
+    compose,
+    cctx: compose.getContext('2d'),
+    footer,
+    W: width,
+    H: width + footer.height,
+    src: currentConfig.dim === '2d' ? $('canvas2d') : renderer.renderer.domElement,
   };
-  frame();
+}
+
+function drawComposeFrame(setup, t) {
+  renderer.draw(compiled, t, {}); // clean: no grid/overlays
+  setup.cctx.fillStyle = '#000';
+  setup.cctx.fillRect(0, 0, setup.W, setup.H);
+  setup.cctx.drawImage(setup.src, 0, 0, setup.W, setup.W);
+  setup.cctx.drawImage(setup.footer, 0, setup.W);
+}
+
+function saveBlob(blob, ext) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${$('pattern-name').value.trim() || 'pattern'}.${ext}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+  $('editor-msg').textContent =
+    `Saved ${a.download} (${(blob.size / 1e6).toFixed(1)} MB).`;
+}
+
+function pickClipMime() {
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) return null;
+  return ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']
+    .find((m) => MediaRecorder.isTypeSupported(m)) || null;
+}
+
+// Records in real time (10 s wall clock) via the browser's native encoder.
+async function recordVideo(mime) {
+  const msg = $('editor-msg');
+  const setup = await prepareCompose(CLIP_SIZE);
+  const stream = setup.compose.captureStream(30);
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8e6 });
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  const stopped = new Promise((resolve) => { rec.onstop = resolve; });
+  const t0 = currentT();
+  rec.start(1000);
+  const start = performance.now();
+  await new Promise((resolve) => {
+    const step = () => {
+      const elapsed = (performance.now() - start) / 1000;
+      if (elapsed >= CLIP_SECONDS) { resolve(); return; }
+      drawComposeFrame(setup, t0 + elapsed);
+      msg.textContent = `Recording… ${elapsed.toFixed(1)} / ${CLIP_SECONDS}s`;
+      requestAnimationFrame(step);
+    };
+    step();
+  });
+  rec.stop();
+  await stopped;
+  saveBlob(new Blob(chunks, { type: mime }), mime.includes('mp4') ? 'mp4' : 'webm');
+}
+
+// Each frame is drawn, quantized to a 256-color palette, and written to
+// the GIF immediately — memory stays flat even at high resolution.
+async function recordGif() {
+  const msg = $('editor-msg');
+  await ensureGifenc();
+  const setup = await prepareCompose(GIF_SIZE);
+  const { GIFEncoder, quantize, applyPalette } = gifenc;
+  const gif = GIFEncoder();
+  const frames = CLIP_SECONDS * GIF_FPS;
+  const t0 = currentT();
+  for (let f = 0; f < frames; f++) {
+    drawComposeFrame(setup, t0 + f / GIF_FPS);
+    const { data } = setup.cctx.getImageData(0, 0, setup.W, setup.H);
+    const palette = quantize(data, 256);
+    const index = applyPalette(data, palette);
+    gif.writeFrame(index, setup.W, setup.H, { palette, delay: 1000 / GIF_FPS });
+    msg.textContent = `Encoding GIF… ${f + 1}/${frames}`;
+    await new Promise((r) => setTimeout(r)); // let the UI breathe
+  }
+  gif.finish();
+  saveBlob(new Blob([gif.bytes()], { type: 'image/gif' }), 'gif');
+}
+
+// Shared wrapper: disables the export buttons, loads the math renderer,
+// borrows the live canvas for capture, and always resumes the view.
+async function runExport(job) {
+  if (!renderer || !currentConfig) return;
+  const buttons = [$('btn-gif'), $('btn-webm')];
+  for (const b of buttons) b.disabled = true;
+  const msg = $('editor-msg');
+  try {
+    msg.textContent = 'Rendering equations…';
+    await ensureMathJax();
+    cancelAnimationFrame(rafId);
+    await job();
+  } catch (err) {
+    msg.textContent = `Export failed: ${err.message || err}`;
+  } finally {
+    for (const b of buttons) b.disabled = false;
+    cancelAnimationFrame(rafId);
+    if (renderer) frameLoop(); // resume the live view
+  }
 }
 
 // ---------- sharing ----------
@@ -654,7 +882,23 @@ function tryOpenFromHash() {
 
 // ---------- wire up ----------
 
-$('home-link').addEventListener('click', () => { location.hash = ''; showView('home'); });
+$('home-link').addEventListener('click', () => { location.hash = ''; showView('home'); setHomeTab('mine'); });
+$('btn-home').addEventListener('click', () => { location.hash = ''; showView('home'); setHomeTab('mine'); });
+$('btn-gallery').addEventListener('click', () => {
+  location.hash = '';
+  showView('home');
+  setHomeTab('gallery');
+});
+for (const b of document.querySelectorAll('#home-tabs button')) {
+  b.addEventListener('click', () => setHomeTab(b.dataset.tab));
+}
+$('btn-help').addEventListener('click', () => { $('help-modal').hidden = false; });
+$('btn-help-close').addEventListener('click', () => { $('help-modal').hidden = true; });
+$('help-modal').addEventListener('click', (ev) => {
+  if (ev.target === $('help-modal')) $('help-modal').hidden = true; // tap outside closes
+});
+$('btn-fullscreen').addEventListener('click', () =>
+  setFullscreen(!$('stage').classList.contains('fullscreen')));
 $('btn-new').addEventListener('click', () => { syncWizard(); showView('wizard'); });
 $('btn-wizard-back').addEventListener('click', () => showView('home'));
 $('btn-editor-back').addEventListener('click', () => { location.hash = ''; showView('home'); });
@@ -672,6 +916,12 @@ $('btn-create').addEventListener('click', () => openEditor(configFromWizard()));
 $('btn-play').addEventListener('click', () => setPlaying(!playing));
 $('btn-reset-t').addEventListener('click', () => setT(0));
 $('btn-grid').addEventListener('click', () => setGrid(!gridOn));
+$('btn-gif').addEventListener('click', () => runExport(recordGif));
+$('btn-webm').addEventListener('click', () => runExport(async () => {
+  const mime = pickClipMime();
+  if (!mime) throw new Error('video recording not supported in this browser — try GIF');
+  await recordVideo(mime);
+}));
 $('btn-probe-clear').addEventListener('click', clearProbe);
 
 // Tap or drag on the 2D canvas to probe a grid cell.
@@ -697,6 +947,30 @@ $('btn-probe-clear').addEventListener('click', clearProbe);
   canvas.addEventListener('pointermove', (ev) => {
     if (ev.buttons) probeFromPointer(ev);
   });
+}
+
+// Drag the plot (finger or mouse) to scrub time: pulling the curve to the
+// right rewinds, pulling left advances — like sliding a timeline strip.
+{
+  const plot = $('plot');
+  let dragging = false;
+  let lastX = 0;
+  plot.addEventListener('pointerdown', (ev) => {
+    if (!probe) return;
+    dragging = true;
+    lastX = ev.clientX;
+    plot.setPointerCapture(ev.pointerId);
+  });
+  plot.addEventListener('pointermove', (ev) => {
+    if (!dragging) return;
+    const dx = ev.clientX - lastX;
+    lastX = ev.clientX;
+    const width = plot.clientWidth || 300;
+    setT(currentT() - (dx * 2 * PLOT_HALF_SPAN) / width);
+  });
+  const stop = () => { dragging = false; };
+  plot.addEventListener('pointerup', stop);
+  plot.addEventListener('pointercancel', stop);
 }
 
 // Editable time and probe coordinates (commit on Enter or blur).
