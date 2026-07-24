@@ -40,6 +40,7 @@
         <button data-tab="mine" class="active">My Patterns</button>
         <button data-tab="examples">Examples</button>
         <button data-tab="gallery">Gallery</button>
+        <button data-tab="spectrum">Vision</button>
       </div>
 
       <div id="tab-mine">
@@ -59,6 +60,11 @@
         </div>
         <p id="gallery-status" class="muted">Loading&hellip;</p>
         <ul id="gallery-list" class="pattern-list"></ul>
+      </div>
+
+      <div id="tab-spectrum" hidden>
+        <h2 class="sv-title">Windows on Light</h2>
+        <div id="spectrum-viz"></div>
       </div>
     </section>
 
@@ -101,6 +107,22 @@
         </span>
       </fieldset>
 
+      <fieldset id="shape-3d" hidden>
+        <legend>Shape</legend>
+        <label><input type="radio" name="shape3d" value="cube" checked> Cube</label>
+        <label><input type="radio" name="shape3d" value="sphere"> Sphere</label>
+        <label><input type="radio" name="shape3d" value="cube-shell"> Cube shell</label>
+        <label><input type="radio" name="shape3d" value="sphere-shell"> Sphere shell</label>
+      </fieldset>
+
+      <fieldset id="cell-3d" hidden>
+        <legend>Cells</legend>
+        <label><input type="radio" name="cell3d" value="circle" checked> Circles</label>
+        <label><input type="radio" name="cell3d" value="square"> Squares</label>
+        <label><input type="radio" name="cell3d" value="block"> Blocks</label>
+        <label><input type="radio" name="cell3d" value="hex"> Hexagons</label>
+      </fieldset>
+
       <div class="row">
         <button id="btn-create" class="primary">Create</button>
         <button id="btn-wizard-back">Back</button>
@@ -119,8 +141,7 @@
         <button id="btn-play" class="primary">Pause</button>
         <button id="btn-reset-t">t = 0</button>
         <button id="btn-grid" aria-pressed="false">Grid: off</button>
-        <button id="btn-gif" title="Download a 10-second GIF with the equations">GIF</button>
-        <button id="btn-webm" title="Download a 10-second video with the equations">WebM</button>
+        <button id="btn-tex" aria-pressed="false">Show math</button>
       </div>
 
       <div class="row probe-row">
@@ -135,7 +156,7 @@
       </div>
 
       <div id="workspace">
-        <div id="equations">
+        <div id="equations" class="tex-hidden">
           <div class="equation">
             <label for="eq-r" class="chan chan-r">R =</label>
             <input id="eq-r" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -158,11 +179,13 @@
           <div class="row">
             <button id="btn-add-var">+ Add variable</button>
           </div>
+          <div id="paren-helper" class="paren-helper" aria-hidden="true"></div>
           <p class="muted vars-hint">Define helper variables, e.g.
             <code>u = sqrt((x-1/2)^2 + y^2)</code>, then use them in R, G, B.</p>
         </div>
         <div id="plot-panel" hidden>
           <canvas id="plot"></canvas>
+          <div id="plot-legend" class="plot-legend" hidden></div>
           <div class="row plot-range">
             <label class="mono">min <input id="plot-min" value="0" inputmode="decimal" autocomplete="off"></label>
             <label class="mono">max <input id="plot-max" value="1" inputmode="decimal" autocomplete="off"></label>
@@ -191,7 +214,11 @@
       <div id="publish-box">
         <textarea id="pattern-desc" rows="2" maxlength="400"
           placeholder="Brief description — what does your pattern do?"></textarea>
-        <button id="btn-publish" class="primary">Publish to gallery</button>
+        <div class="row publish-row">
+          <button id="btn-publish" class="primary">Publish to gallery</button>
+          <button id="btn-gif" title="Download a 10-second GIF with the equations">GIF</button>
+          <button id="btn-webm" title="Download a 10-second video with the equations">WebM</button>
+        </div>
       </div>
       <p id="editor-msg" class="muted"></p>
     </section>

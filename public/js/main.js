@@ -1,16 +1,24 @@
 // App shell: home / new-pattern wizard / live editor.
 
 import { compileChannel, evalRaw, evalValue, makeTestScope } from './math-engine.js';
+import { renderSpectrum } from './spectrum.js';
 import { Renderer2D } from './render2d.js';
 
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'pil_patterns';
 const CHANNEL_COLORS = { r: '#ff7a7a', g: '#7aff9c', b: '#7ab8ff' };
+const VAR_COLORS = ['#ffd24a', '#4ad6d6', '#c39bff', '#ff9f40', '#7affce', '#ff7ac0'];
 const CELL_NAMES = { square: 'squares', tri: 'triangles', circle: 'circles', hex: 'hexagons' };
 
 // ---------- built-in examples ----------
 
 const EXAMPLES = [
+  {
+    // flat neutral gray — a blank canvas to start from (edit R, G, B)
+    name: 'Blank',
+    config: { dim: '2d', nx: 40, ny: 40, cellType: 'square',
+      eqs: { r: '.2', g: '.2', b: '.2' } },
+  },
   {
     name: 'Pulse',
     config: { dim: '2d', nx: 20, ny: 20, cellType: 'square',
@@ -25,6 +33,49 @@ const EXAMPLES = [
     name: 'Spiral',
     config: { dim: '2d', nx: 40, ny: 40, cellType: 'hex',
       eqs: { r: '(1+sin(3theta + 12r - 2t))/2', g: '(1+sin(3theta + 12r - 2t + 2))/2', b: '(1+sin(3theta + 12r - 2t + 4))/2' } },
+  },
+  {
+    // hue mapped around the angle — a colour wheel (uses polar theta)
+    name: 'Colour wheel',
+    config: { dim: '2d', nx: 40, ny: 40, cellType: 'square',
+      eqs: { r: '(1+cos(theta))/2', g: '(1+cos(theta - 2.094))/2', b: '(1+cos(theta + 2.094))/2' } },
+  },
+  {
+    // stripes rotating over time: project (x,y) onto a spinning direction
+    name: 'Rotating stripes',
+    config: { dim: '2d', nx: 40, ny: 40, cellType: 'square',
+      eqs: {
+        r: '(1+sin(8*(x*cos(t) + y*sin(t))))/2',
+        g: '(1+sin(8*(x*cos(t) + y*sin(t)) + 2))/2',
+        b: '(1+sin(8*(x*cos(t) + y*sin(t)) + 4))/2',
+      } },
+  },
+  {
+    // floor + mod make hard-edged tiles instead of smooth waves
+    name: 'Checkerboard',
+    config: { dim: '2d', nx: 40, ny: 40, cellType: 'square',
+      eqs: {
+        r: 'mod(floor(4*(x+1)) + floor(4*(y+1)), 2)',
+        g: 'mod(floor(4*(x+1)) + floor(4*(y+1)), 2)',
+        b: 'mod(floor(4*(x+1)) + floor(4*(y+1)), 2)',
+      } },
+  },
+  {
+    // classic plasma: sum several waves into one variable, then colour by it
+    name: 'Plasma',
+    config: { dim: '2d', nx: 40, ny: 40, cellType: 'square',
+      vars: [{ name: 'v', expr: 'sin(6x + t) + sin(6y - t) + sin(6*(x+y) + t) + sin(8*sqrt(x^2 + y^2) - t)' }],
+      eqs: { r: '(1+sin(v))/2', g: '(1+sin(v + 2.094))/2', b: '(1+sin(v + 4.188))/2' } },
+  },
+  {
+    // two ripple sources orbiting the centre, interfering (uses variables)
+    name: 'Interference',
+    config: { dim: '2d', nx: 40, ny: 40, cellType: 'square',
+      vars: [
+        { name: 'd1', expr: 'sqrt((x - cos(t)/2)^2 + (y - sin(t)/2)^2)' },
+        { name: 'd2', expr: 'sqrt((x + cos(t)/2)^2 + (y + sin(t)/2)^2)' },
+      ],
+      eqs: { r: '(1+sin(20*d1))/2', g: '(1+sin(20*d2))/2', b: '(1+sin(10*(d1 + d2)))/2' } },
   },
   {
     // a helper variable defines a radius whose center wanders over time
@@ -58,6 +109,12 @@ const EXAMPLES = [
     name: '3D waves',
     config: { dim: '3d', n: 12,
       eqs: { r: '(1+sin(3x + 2t))/2', g: '(1+sin(3y + 2t))/2', b: '(1+sin(3z + 2t))/2' } },
+  },
+  {
+    // each axis drives one colour channel → an 8-corner colour cube
+    name: '3D colour cube',
+    config: { dim: '3d', n: 12,
+      eqs: { r: 'mod(floor(3*(x+1)), 2)', g: 'mod(floor(3*(y+1)), 2)', b: 'mod(floor(3*(z+1)), 2)' } },
   },
 ];
 
@@ -102,8 +159,9 @@ function setHomeTab(tab) {
   for (const b of document.querySelectorAll('#home-tabs button')) {
     b.classList.toggle('active', b.dataset.tab === tab);
   }
-  for (const t of ['mine', 'examples', 'gallery']) $(`tab-${t}`).hidden = t !== tab;
+  for (const t of ['mine', 'examples', 'gallery', 'spectrum']) $(`tab-${t}`).hidden = t !== tab;
   if (tab === 'gallery') loadGallery();
+  if (tab === 'spectrum') renderSpectrum();
 }
 
 // ---------- home ----------
@@ -117,8 +175,10 @@ function saveSaved(list) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
 }
 
+const CELL3D_NAMES = { circle: 'circles', square: 'squares', block: 'blocks', hex: 'hexagons' };
+const SHAPE3D_NAMES = { cube: 'cube', sphere: 'sphere', 'cube-shell': 'cube shell', 'sphere-shell': 'sphere shell' };
 function describe(config) {
-  if (config.dim === '3d') return `3D · ${config.n}³`;
+  if (config.dim === '3d') return `3D · ${config.n}³ · ${SHAPE3D_NAMES[config.shape3d] || 'cube'} · ${CELL3D_NAMES[config.cellType3d] || 'circles'}`;
   return `2D · ${config.nx}×${config.ny} · ${CELL_NAMES[config.cellType] || 'squares'}`;
 }
 
@@ -256,8 +316,10 @@ function wizardDim() {
 function syncWizard() {
   const is3d = wizardDim() === '3d';
   $('grid-2d').hidden = is3d;
-  $('grid-3d').hidden = !is3d;
   $('cell-shape').hidden = is3d;
+  $('grid-3d').hidden = !is3d;
+  $('shape-3d').hidden = !is3d;
+  $('cell-3d').hidden = !is3d;
 }
 
 function clampInt(value, lo, hi, fallback) {
@@ -286,7 +348,9 @@ function configFromWizard() {
   }
   const choice = document.querySelector('input[name="grid3d"]:checked').value;
   const n = choice === 'custom' ? clampInt($('custom-n3').value, 2, 32, 12) : Number(choice);
-  return { dim, n, eqs };
+  const shape3d = document.querySelector('input[name="shape3d"]:checked').value;
+  const cellType3d = document.querySelector('input[name="cell3d"]:checked').value;
+  return { dim, n, shape3d, cellType3d, eqs };
 }
 
 // ---------- editor ----------
@@ -329,6 +393,55 @@ function renderTex(el, tex) {
   el.textContent = tex;
 }
 
+// ----- show/hide the typeset (LaTeX) equations -----
+let texShown = false;
+function setTex(on) {
+  texShown = on;
+  $('equations').classList.toggle('tex-hidden', !on);
+  $('btn-tex').textContent = on ? 'Hide math' : 'Show math';
+  $('btn-tex').setAttribute('aria-pressed', String(on));
+}
+
+// ----- matching-parenthesis helper -----
+const escHtml = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+// Index of the parenthesis matching the one at `pos`, or -1 if unbalanced.
+function matchParen(text, pos) {
+  const ch = text[pos];
+  if (ch === '(') { let d = 0; for (let i = pos; i < text.length; i++) { if (text[i] === '(') d++; else if (text[i] === ')' && --d === 0) return i; } return -1; }
+  if (ch === ')') { let d = 0; for (let i = pos; i >= 0; i--) { if (text[i] === ')') d++; else if (text[i] === '(' && --d === 0) return i; } return -1; }
+  return null;
+}
+
+// When the caret sits next to a parenthesis, echo the expression below with
+// that bracket and its partner highlighted (or flagged red if unbalanced).
+function attachParenHelper(input) {
+  const update = () => updateParenHelper(input);
+  for (const ev of ['keyup', 'click', 'input', 'focus', 'select']) input.addEventListener(ev, update);
+  input.addEventListener('blur', () => { $('paren-helper').innerHTML = ''; });
+}
+function updateParenHelper(input) {
+  const help = $('paren-helper');
+  if (document.activeElement !== input) { help.innerHTML = ''; return; }
+  const text = input.value;
+  const caret = input.selectionStart;
+  let pos = null;
+  for (const p of [caret - 1, caret]) {
+    if (p >= 0 && p < text.length && (text[p] === '(' || text[p] === ')')) { pos = p; break; }
+  }
+  if (pos == null) { help.innerHTML = ''; return; }
+  const m = matchParen(text, pos);
+  let html = '';
+  for (let i = 0; i < text.length; i++) {
+    const ch = escHtml(text[i]);
+    if (i === pos) html += `<span class="${m === -1 ? 'perr' : 'pmatch'}">${ch}</span>`;
+    else if (i === m) html += `<span class="pmatch">${ch}</span>`;
+    else html += ch;
+  }
+  if (m === -1) html += ' <span class="perr">unbalanced ( )</span>';
+  help.innerHTML = html;
+}
+
 function recompile(channel) {
   const input = $(`eq-${channel}`);
   const errEl = $(`err-${channel}`);
@@ -359,6 +472,7 @@ function addVarRow(text = '') {
     clearTimeout(debounce);
     debounce = setTimeout(refreshEquations, 300);
   });
+  attachParenHelper(input);
   const del = document.createElement('button');
   del.className = 'delete';
   del.textContent = '✕';
@@ -408,6 +522,15 @@ function refreshEquations() {
   else delete currentConfig.vars;
   compiled.vars = compiledVars;
   for (const c of ['r', 'g', 'b']) recompile(c);
+  updatePlotLegend();
+}
+
+// Legend under the probe plot naming each variable curve.
+function updatePlotLegend() {
+  const box = $('plot-legend');
+  box.innerHTML = compiledVars.map((v, i) =>
+    `<span class="pl" style="color:${VAR_COLORS[i % VAR_COLORS.length]}"><i></i><span style="color:var(--muted)">${v.name}</span></span>`).join('');
+  box.hidden = compiledVars.length === 0;
 }
 
 // ----- probing -----
@@ -513,26 +636,33 @@ function drawPlot(tNow) {
   const count = PLOT_SAMPLES + 2; // cover both edges of the window
   const scope = { ...probe.base };
   const series = {};
+  const varSeries = compiledVars.map(() => new Array(count));
   const times = new Array(count);
   let lo = Math.min(minLine, maxLine);
   let hi = Math.max(minLine, maxLine);
-  for (const c of ['r', 'g', 'b']) {
-    if (!compiled[c]) continue;
-    const arr = new Array(count);
-    for (let s = 0; s < count; s++) {
-      const ts = tStart + s * dt;
-      times[s] = ts;
-      scope.t = ts;
-      for (const uv of compiledVars) scope[uv.name] = evalValue(uv.code, scope);
-      const v = evalRaw(compiled[c], scope);
-      arr[s] = v;
-      if (v != null) {
-        if (v < lo) lo = v;
-        if (v > hi) hi = v;
-      }
+  const chan = { r: compiled.r ? new Array(count) : null, g: compiled.g ? new Array(count) : null, b: compiled.b ? new Array(count) : null };
+  // Single pass: evaluate the helper variables (capturing each for its own
+  // curve), then the channels that use them.
+  for (let s = 0; s < count; s++) {
+    const ts = tStart + s * dt;
+    times[s] = ts;
+    scope.t = ts;
+    for (let k = 0; k < compiledVars.length; k++) {
+      const val = evalValue(compiledVars[k].code, scope);
+      scope[compiledVars[k].name] = val; // keep full (possibly complex) value for the channels
+      let num = (val && typeof val === 'object') ? (typeof val.re === 'number' ? val.re : null) : val;
+      if (typeof num !== 'number' || !Number.isFinite(num)) num = null;
+      varSeries[k][s] = num;
+      if (num != null) { if (num < lo) lo = num; if (num > hi) hi = num; }
     }
-    series[c] = arr;
+    for (const c of ['r', 'g', 'b']) {
+      if (!chan[c]) continue;
+      const v = evalRaw(compiled[c], scope);
+      chan[c][s] = v;
+      if (v != null) { if (v < lo) lo = v; if (v > hi) hi = v; }
+    }
   }
+  for (const c of ['r', 'g', 'b']) if (chan[c]) series[c] = chan[c];
   if (hi - lo < 1e-9) { lo -= 0.5; hi += 0.5; }
   const rangePad = (hi - lo) * 0.08;
   lo -= rangePad;
@@ -569,7 +699,7 @@ function drawPlot(tNow) {
   ctx.lineTo(w / 2, h);
   ctx.stroke();
 
-  // channel curves (gaps where the value is undefined)
+  // channel curves (solid; gaps where the value is undefined)
   ctx.lineWidth = 1.5 * dpr;
   for (const c of ['r', 'g', 'b']) {
     if (!series[c]) continue;
@@ -584,6 +714,22 @@ function drawPlot(tNow) {
     }
     ctx.stroke();
   }
+
+  // variable curves (dashed, in their legend colours)
+  ctx.setLineDash([5 * dpr, 4 * dpr]);
+  for (let k = 0; k < varSeries.length; k++) {
+    ctx.strokeStyle = VAR_COLORS[k % VAR_COLORS.length];
+    ctx.beginPath();
+    let pen = false;
+    for (let s = 0; s < count; s++) {
+      const v = varSeries[k][s];
+      if (v == null) { pen = false; continue; }
+      if (pen) ctx.lineTo(X(s), Y(v));
+      else { ctx.moveTo(X(s), Y(v)); pen = true; }
+    }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
 
   // time axis labels
   ctx.fillStyle = '#8a93a8';
@@ -612,6 +758,7 @@ async function openEditor(config, name = '', view = null, origin = null) {
   $('wrap-phi').hidden = config.dim !== '3d';
   clearProbe();
   setGrid(false);
+  setTex(false); // default: show only the plain-text equations
 
   const canvas = $('canvas2d');
   const container = $('container3d');
@@ -623,7 +770,7 @@ async function openEditor(config, name = '', view = null, origin = null) {
     renderer = new Renderer2D(canvas, config.nx, config.ny, config.cellType || 'square');
   } else {
     const { Renderer3D } = await import('./render3d.js'); // load three.js only when needed
-    renderer = new Renderer3D(container, config.n);
+    renderer = new Renderer3D(container, config.n, { shape: config.shape3d, cellType: config.cellType3d });
   }
 
   compiled = { r: null, g: null, b: null };
@@ -916,6 +1063,7 @@ $('btn-create').addEventListener('click', () => openEditor(configFromWizard()));
 $('btn-play').addEventListener('click', () => setPlaying(!playing));
 $('btn-reset-t').addEventListener('click', () => setT(0));
 $('btn-grid').addEventListener('click', () => setGrid(!gridOn));
+$('btn-tex').addEventListener('click', () => setTex(!texShown));
 $('btn-gif').addEventListener('click', () => runExport(recordGif));
 $('btn-webm').addEventListener('click', () => runExport(async () => {
   const mime = pickClipMime();
@@ -996,6 +1144,7 @@ for (const c of ['r', 'g', 'b']) {
     clearTimeout(debounce);
     debounce = setTimeout(() => recompile(c), 250);
   });
+  attachParenHelper($(`eq-${c}`));
 }
 
 $('btn-add-var').addEventListener('click', () => addVarRow('').focus());

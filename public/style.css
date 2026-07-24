@@ -270,7 +270,28 @@ details#help p { margin: 0.45rem 0; }
 
 .save-row input { flex: 1; min-width: 8rem; }
 
-#publish-box { display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; margin: 0.75rem 0; }
+#publish-box { display: flex; flex-direction: column; gap: 0.5rem; align-items: stretch; margin: 0.75rem 0; }
+.publish-row { margin: 0; }
+
+/* toggled off by default; the "Show math" button removes this class */
+#equations.tex-hidden .tex { display: none; }
+
+.paren-helper {
+  grid-column: 1 / -1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  color: var(--muted);
+  min-height: 1.2em;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0.1rem 0 0.2rem;
+}
+.paren-helper .pmatch { background: rgba(255, 210, 74, 0.35); color: #fff; border-radius: 3px; }
+.paren-helper .perr { background: rgba(255, 107, 107, 0.45); color: #fff; border-radius: 3px; padding: 0 2px; }
+
+.plot-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 0.7rem; font-size: 0.72rem; color: var(--muted); }
+.plot-legend .pl { display: inline-flex; align-items: center; gap: 0.3rem; }
+.plot-legend .pl i { width: 15px; border-top: 2px dashed currentColor; display: inline-block; height: 0; }
 
 #editor-msg { min-height: 1.2em; margin: 0.25rem 0; }
 
@@ -330,3 +351,128 @@ details#help p { margin: 0.45rem 0; }
 .g-actions button { padding: 0.3rem 0.7rem; min-height: 2.2rem; white-space: nowrap; }
 .g-actions button:disabled { opacity: 0.6; cursor: default; }
 .g-actions button.liked { border-color: #ff6b6b; color: #ff6b6b; }
+
+/* ================= Vision tab (spectrum-of-perception) ================= */
+#tab-spectrum {
+  --sv-labelw: 160px;
+  --sv-conew: 100px;
+  --sv-gap: 10px;
+  --sv-gold: #ffd24a;
+}
+.sv-title { font-size: 1.25rem; margin: 0.2rem 0 0.2rem; }
+.sv-sub { color: var(--ink-2, #aab2c6); font-size: 0.9rem; line-height: 1.5; margin: 0 0 1.1rem; max-width: 66ch; }
+.sv-section {
+  background: #0e1017;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.9rem 0.9rem 1.1rem;
+  margin-bottom: 0.2rem;
+}
+.sv-section h2 { font-size: 1rem; margin: 0.1rem 0 0.15rem; }
+.sv-note { color: #6f7890; font-size: 0.8rem; line-height: 1.45; margin: 0 0 0.9rem; }
+
+.sv-row {
+  display: grid;
+  grid-template-columns: var(--sv-labelw) 1fr var(--sv-conew);
+  align-items: center;
+  gap: var(--sv-gap);
+  margin: 5px 0;
+}
+.sv-rowlabel { font-size: 0.82rem; text-align: right; line-height: 1.15; }
+.sv-rowlabel .sv-tag { display: block; color: #6f7890; font-size: 0.68rem; }
+.sv-rowlabel.human b { color: var(--sv-gold); }
+
+.sv-ruler { height: 14px; border-radius: 5px; border: 1px solid #2b3040; }
+.sv-colhead { font-size: 0.66rem; color: #6f7890; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.sv-track {
+  position: relative; height: 26px; border-radius: 6px;
+  background: #12141d; border: 1px solid var(--border); overflow: hidden;
+}
+.sv-bar {
+  position: absolute; top: 3px; bottom: 3px; border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14), 0 1px 3px rgba(0,0,0,0.5);
+}
+.sv-bar.sv-offscale {
+  background: linear-gradient(90deg, #3a0a0a, #7a1010);
+  display: flex; align-items: center; justify-content: flex-end;
+  font-size: 0.6rem; color: #ffcaca; padding-right: 3px;
+}
+
+.sv-plot { position: relative; }
+.sv-guides {
+  position: absolute; top: 0; bottom: 0;
+  left: calc(var(--sv-labelw) + var(--sv-gap));
+  right: calc(var(--sv-conew) + var(--sv-gap));
+  pointer-events: none;
+}
+.sv-gline { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.14); }
+.sv-gline.gold { background: rgba(255,210,74,0.7); border-left: 1px dashed rgba(255,210,74,0.9); width: 0; }
+.sv-glabel {
+  position: absolute; bottom: 100%; left: 3px; color: var(--sv-gold);
+  font-size: 0.62rem; letter-spacing: 0.04em; white-space: nowrap;
+}
+.sv-gband { position: absolute; top: 0; bottom: 0; background: rgba(255,210,74,0.10); }
+
+.sv-cones { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--ink-2, #aab2c6); }
+.sv-conechip {
+  background: #12141d; border: 1px solid var(--border); border-radius: 999px;
+  padding: 1px 8px; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); white-space: nowrap;
+}
+.sv-conedots { display: inline-flex; gap: 3px; }
+.sv-conedots i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+.sv-axis { position: relative; height: 30px; }
+.sv-axis .sv-tick { position: absolute; top: 0; transform: translateX(-50%); text-align: center; color: #6f7890; font-size: 0.7rem; }
+.sv-axis .sv-tick::before { content: ""; position: absolute; left: 50%; top: 14px; width: 1px; height: 7px; background: var(--border); }
+.sv-axis .sv-tick .u { display: block; font-size: 0.6rem; color: #565f76; }
+.sv-axis.top .sv-tick { bottom: 0; top: auto; }
+.sv-axis.top .sv-tick::before { top: auto; bottom: 14px; }
+
+.sv-bandlabels { position: relative; height: 38px; }
+.sv-bandlabels .sv-b {
+  position: absolute; top: 0; transform: translateX(-50%); font-size: 0.7rem;
+  color: var(--ink-2, #aab2c6); font-weight: 600; white-space: nowrap;
+}
+.sv-bandlabels .sv-b.lvl2 { top: 18px; }
+/* little tick joining each label down to the wave/axis below */
+.sv-bandlabels .sv-b::after {
+  content: ""; position: absolute; left: 50%; top: 100%; width: 1px;
+  background: var(--border); height: 20px;
+}
+.sv-bandlabels .sv-b.lvl2::after { height: 2px; }
+.sv-wave { width: 100%; height: 40px; display: block; }
+
+.sv-conn { position: relative; height: 30px; }
+.sv-conn > div {
+  position: absolute; top: 0; bottom: 0;
+  left: calc(var(--sv-labelw) + var(--sv-gap));
+  right: calc(var(--sv-conew) + var(--sv-gap));
+}
+.sv-conn svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+#sv-tip {
+  position: fixed; z-index: 300; pointer-events: none; background: #0b0d14;
+  border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; font-size: 0.8rem;
+  color: var(--text); max-width: 260px; box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+  opacity: 0; transition: opacity 0.08s;
+}
+#sv-tip .t-name { font-weight: 700; margin-bottom: 2px; }
+#sv-tip .t-range { color: var(--accent); font-variant-numeric: tabular-nums; }
+#sv-tip .t-note { color: var(--ink-2, #aab2c6); margin-top: 4px; line-height: 1.35; }
+
+.sv-caption { color: #6f7890; font-size: 0.75rem; line-height: 1.5; margin: 0.9rem 0 0; }
+.sv-tabler { margin-top: 0.8rem; }
+.sv-tabler summary { cursor: pointer; color: var(--accent); font-size: 0.85rem; }
+.sv-tabler h3 { font-size: 0.9rem; margin: 0.8rem 0 0.2rem; }
+.sv-tabler table { width: 100%; border-collapse: collapse; margin-top: 0.4rem; font-size: 0.8rem; }
+.sv-tabler th, .sv-tabler td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+.sv-tabler th { color: #6f7890; font-weight: 600; }
+.sv-tabler td.num { font-variant-numeric: tabular-nums; color: var(--ink-2, #aab2c6); }
+
+@media (max-width: 640px) {
+  #tab-spectrum { --sv-labelw: 92px; --sv-conew: 58px; --sv-gap: 6px; }
+  .sv-rowlabel { font-size: 0.7rem; }
+  .sv-cones { font-size: 0.68rem; }
+  .sv-conedots { display: none; }
+}

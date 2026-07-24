@@ -127,6 +127,8 @@ const store = process.env.DATABASE_URL
 // ---------- validation ----------
 
 const CELL_TYPES = ['square', 'tri', 'circle', 'hex'];
+const SHAPES_3D = ['cube', 'sphere', 'cube-shell', 'sphere-shell'];
+const CELL_TYPES_3D = ['circle', 'square', 'block', 'hex'];
 
 // Rebuild the config from scratch so only known, bounded fields are stored.
 function sanitizeConfig(c) {
@@ -155,7 +157,9 @@ function sanitizeConfig(c) {
   }
   if (c.dim === '3d') {
     if (!int(c.n, 2, 32)) return null;
-    return withVars({ dim: '3d', n: c.n, eqs: { r, g, b } });
+    const shape3d = SHAPES_3D.includes(c.shape3d) ? c.shape3d : 'cube';
+    const cellType3d = CELL_TYPES_3D.includes(c.cellType3d) ? c.cellType3d : 'circle';
+    return withVars({ dim: '3d', n: c.n, shape3d, cellType3d, eqs: { r, g, b } });
   }
   return null;
 }

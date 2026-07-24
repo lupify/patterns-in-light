@@ -1,17 +1,67 @@
-// 3D renderer: an n×n×n grid of points in [-1,1]^3 whose colors come
-// from the R/G/B equations. Drag to orbit, pinch/scroll to zoom.
+// 3D renderer: a grid of cells in [-1,1]^3 whose colors come from the
+// R/G/B equations. Drag to orbit, pinch/scroll to zoom.
+//
+// shape:    'cube'  → the full n×n×n lattice
+//           'sphere'→ only lattice points within radius 1
+// cellType: 'circle'→ round points (billboards)
+//           'block' → little cubes (instanced)
+//           'hex'   → hexagonal prisms (instanced)
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeScopes3D, evalIntensity, evalValue } from './math-engine.js';
 
+// A soft round sprite so 'circle' points render as discs, not squares.
+function circleTexture() {
+  const s = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  grd.addColorStop(0, '#fff');
+  grd.addColorStop(0.65, '#fff');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.beginPath();
+  g.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2);
+  g.fill();
+  return new THREE.CanvasTexture(c);
+}
+
 export class Renderer3D {
-  constructor(container, n) {
+  constructor(container, n, opts = {}) {
     this.container = container;
     this.n = n;
+    this.shape = ['cube', 'sphere', 'cube-shell', 'sphere-shell'].includes(opts.shape) ? opts.shape : 'cube';
+    this.cellType = ['circle', 'square', 'block', 'hex'].includes(opts.cellType) ? opts.cellType : 'circle';
 
+    // Full lattice is kept for coordinate probing; `idx` selects which
+    // points are actually drawn: the full cube, the filled ball, or just
+    // the outer layer for the hollow "shell" shapes.
     const { scopes, positions } = makeScopes3D(n);
     this.scopes = scopes;
+    this.idx = [];
+    const spacing = 2 / n;
+    const shellMin = 1 - 1.5 * spacing; // rho band for the spherical shell
+    for (let i = 0; i < scopes.length; i++) {
+      const rho = scopes[i].rho;
+      let keep = true;
+      if (this.shape === 'sphere') keep = rho <= 1.0001;
+      else if (this.shape === 'sphere-shell') keep = rho <= 1.0001 && rho >= shellMin;
+      else if (this.shape === 'cube-shell') {
+        const ii = i % n, jj = Math.floor(i / n) % n, kk = Math.floor(i / (n * n));
+        keep = ii === 0 || ii === n - 1 || jj === 0 || jj === n - 1 || kk === 0 || kk === n - 1;
+      }
+      if (keep) this.idx.push(i);
+    }
+    this.count = this.idx.length;
+    const sub = new Float32Array(this.count * 3);
+    for (let j = 0; j < this.count; j++) {
+      const i = this.idx[j];
+      sub[j * 3] = positions[i * 3];
+      sub[j * 3 + 1] = positions[i * 3 + 1];
+      sub[j * 3 + 2] = positions[i * 3 + 2];
+    }
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x000000);
@@ -26,30 +76,53 @@ export class Renderer3D {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
 
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    this.colors = new Float32Array(scopes.length * 3);
-    geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
+    // Build the cells for the chosen type. Sizes are ~half the lattice
+    // spacing so there's clear space between individual cells.
+    if (this.cellType === 'circle' || this.cellType === 'square') {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(sub, 3));
+      this.colors = new Float32Array(this.count * 3);
+      geo.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
+      const matOpts = { size: spacing * 0.55, vertexColors: true, sizeAttenuation: true };
+      if (this.cellType === 'circle') { // round sprite; 'square' uses the default square point
+        this.tex = circleTexture();
+        matOpts.map = this.tex;
+        matOpts.alphaTest = 0.4;
+        matOpts.transparent = true;
+      }
+      this.obj = new THREE.Points(geo, new THREE.PointsMaterial(matOpts));
+      this.mode = 'points';
+    } else {
+      const geom = this.cellType === 'hex'
+        ? new THREE.CylinderGeometry(spacing * 0.4, spacing * 0.4, spacing * 0.55, 6)
+        : new THREE.BoxGeometry(spacing * 0.55, spacing * 0.55, spacing * 0.55);
+      this.obj = new THREE.InstancedMesh(geom, new THREE.MeshBasicMaterial(), this.count);
+      const dummy = new THREE.Object3D();
+      for (let j = 0; j < this.count; j++) {
+        dummy.position.set(sub[j * 3], sub[j * 3 + 1], sub[j * 3 + 2]);
+        dummy.updateMatrix();
+        this.obj.setMatrixAt(j, dummy.matrix);
+      }
+      this.obj.instanceMatrix.needsUpdate = true;
+      this._color = new THREE.Color();
+      this.mode = 'instanced';
+    }
+    this.scene.add(this.obj);
 
-    const material = new THREE.PointsMaterial({
-      size: 1.6 / n,
-      vertexColors: true,
-      sizeAttenuation: true,
-    });
-    this.points = new THREE.Points(geometry, material);
-    this.scene.add(this.points);
-
-    // Boundary wireframe (the "grid" toggle in 3D)
-    this.box = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(2, 2, 2)),
-      new THREE.LineBasicMaterial({ color: 0x777777 }),
+    // Boundary shown with the grid toggle: box for a cube, sphere for a ball.
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x777777, transparent: true, opacity: 0.6 });
+    this.bound = new THREE.LineSegments(
+      this.shape.startsWith('sphere')
+        ? new THREE.WireframeGeometry(new THREE.SphereGeometry(1, 16, 12))
+        : new THREE.EdgesGeometry(new THREE.BoxGeometry(2, 2, 2)),
+      lineMat,
     );
-    this.box.visible = false;
-    this.scene.add(this.box);
+    this.bound.visible = false;
+    this.scene.add(this.bound);
 
     // Marker showing the currently probed grid point
     this.marker = new THREE.Mesh(
-      new THREE.SphereGeometry(1.4 / n, 12, 8),
+      new THREE.SphereGeometry(spacing * 0.7, 12, 8),
       new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }),
     );
     this.marker.visible = false;
@@ -85,19 +158,26 @@ export class Renderer3D {
 
   // opts: { grid: bool, probe: {x, y, z} | null }
   draw(fns, t, opts = {}) {
-    const { scopes, colors } = this;
     const vars = fns.vars;
-    for (let idx = 0; idx < scopes.length; idx++) {
-      const scope = scopes[idx];
+    for (let j = 0; j < this.count; j++) {
+      const scope = this.scopes[this.idx[j]];
       scope.t = t;
       if (vars) for (const v of vars) scope[v.name] = evalValue(v.code, scope);
-      const p = idx * 3;
-      colors[p] = fns.r ? evalIntensity(fns.r, scope) : 0;
-      colors[p + 1] = fns.g ? evalIntensity(fns.g, scope) : 0;
-      colors[p + 2] = fns.b ? evalIntensity(fns.b, scope) : 0;
+      const R = fns.r ? evalIntensity(fns.r, scope) : 0;
+      const G = fns.g ? evalIntensity(fns.g, scope) : 0;
+      const B = fns.b ? evalIntensity(fns.b, scope) : 0;
+      if (this.mode === 'points') {
+        const p = j * 3;
+        this.colors[p] = R; this.colors[p + 1] = G; this.colors[p + 2] = B;
+      } else {
+        this._color.setRGB(R, G, B);
+        this.obj.setColorAt(j, this._color);
+      }
     }
-    this.points.geometry.attributes.color.needsUpdate = true;
-    this.box.visible = !!opts.grid;
+    if (this.mode === 'points') this.obj.geometry.attributes.color.needsUpdate = true;
+    else this.obj.instanceColor.needsUpdate = true;
+
+    this.bound.visible = !!opts.grid;
     this.axes.visible = !!opts.grid;
     const p = opts.probe;
     if (p) {
@@ -126,7 +206,7 @@ export class Renderer3D {
     }
   }
 
-  // Nearest grid point to world coordinates (each ∈ [-1, 1]).
+  // Nearest lattice point to world coordinates (each ∈ [-1, 1]).
   cellFromCoords(x, y, z) {
     const n = this.n;
     const snap = (v) => Math.min(n - 1, Math.max(0, Math.round(((v + 1) * n) / 2 - 0.5)));
@@ -139,10 +219,11 @@ export class Renderer3D {
 
   dispose() {
     this.controls.dispose();
-    this.points.geometry.dispose();
-    this.points.material.dispose();
-    this.box.geometry.dispose();
-    this.box.material.dispose();
+    this.obj.geometry.dispose();
+    this.obj.material.dispose();
+    if (this.tex) this.tex.dispose();
+    this.bound.geometry.dispose();
+    this.bound.material.dispose();
     this.marker.geometry.dispose();
     this.marker.material.dispose();
     this.axes.dispose();
